@@ -63,4 +63,7 @@ interface RecordDao {
 
     @Query("UPDATE records SET updatedAt = :now WHERE id = :id")
     suspend fun touchUpdatedAt(id: Long, now: Long = System.currentTimeMillis())
+
+    @Query("UPDATE records SET date = :billDate, updatedAt = :now WHERE id = :id")
+    suspend fun updateBillDate(id: Long, billDate: Long, now: Long = System.currentTimeMillis())
 }

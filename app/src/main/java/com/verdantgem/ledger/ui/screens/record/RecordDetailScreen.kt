@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material3.*
@@ -21,13 +22,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
 import com.verdantgem.ledger.data.repository.LedgerRepository
+import com.verdantgem.ledger.ui.components.DateTimePickerDialog
+import com.verdantgem.ledger.ui.components.formatDateTime
 import com.verdantgem.ledger.ui.theme.dimens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
 
@@ -38,12 +40,29 @@ class RecordDetailViewModel @Inject constructor(
     private val _record = MutableStateFlow<Record?>(null)
     val record: StateFlow<Record?> = _record
 
+    private var currentRecordId: Long = 0
+
+    private val _showDatePicker = MutableStateFlow(false)
+    val showDatePicker: StateFlow<Boolean> = _showDatePicker
+
     val allCategories: StateFlow<List<Category>> = repository.allCategories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun loadRecord(id: Long) {
+        currentRecordId = id
         viewModelScope.launch {
             _record.value = repository.getRecordById(id)
+        }
+    }
+
+    fun showDatePickerDialog() { _showDatePicker.value = true }
+    fun dismissDatePicker() { _showDatePicker.value = false }
+
+    fun updateBillDate(newDate: Long) {
+        viewModelScope.launch {
+            repository.updateRecordBillDate(currentRecordId, newDate)
+            _record.value = repository.getRecordById(currentRecordId)
+            _showDatePicker.value = false
         }
     }
 }
@@ -57,6 +76,7 @@ fun RecordDetailScreen(
 ) {
     val record by viewModel.record.collectAsState()
     val allCategories by viewModel.allCategories.collectAsState()
+    val showDatePicker by viewModel.showDatePicker.collectAsState()
     val d = MaterialTheme.dimens
 
     LaunchedEffect(recordId) {
@@ -123,10 +143,34 @@ fun RecordDetailScreen(
                     )
                 ) {
                     Column(modifier = Modifier.padding(24.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            DetailItem(
+                                icon = Icons.Default.CalendarToday,
+                                label = "账单时间",
+                                value = formatDateTime(currentRecord.date),
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = { viewModel.showDatePickerDialog() },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = "修改账单时间",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), thickness = 0.5.dp)
                         DetailItem(
                             icon = Icons.Default.CalendarToday,
                             label = "记录时间",
-                            value = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(currentRecord.date))
+                            value = formatDateTime(currentRecord.createdAt),
+                            iconTint = MaterialTheme.colorScheme.outline
                         )
                         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), thickness = 0.5.dp)
                         DetailItem(
@@ -149,16 +193,33 @@ fun RecordDetailScreen(
             }
         }
     }
+
+    if (showDatePicker && currentRecord != null) {
+        DateTimePickerDialog(
+            initialDate = currentRecord.date,
+            onConfirm = { viewModel.updateBillDate(it) },
+            onDismiss = { viewModel.dismissDatePicker() }
+        )
+    }
 }
 
 @Composable
-fun DetailItem(icon: ImageVector, label: String, value: String) {
-    Row(verticalAlignment = Alignment.Top) {
+fun DetailItem(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    iconTint: Color = MaterialTheme.colorScheme.primary,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.Top
+    ) {
         Icon(
-            icon, 
-            contentDescription = null, 
+            icon,
+            contentDescription = null,
             modifier = Modifier.size(20.dp),
-            tint = MaterialTheme.colorScheme.primary
+            tint = iconTint
         )
         Spacer(modifier = Modifier.width(16.dp))
         Column {

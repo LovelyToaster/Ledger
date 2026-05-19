@@ -113,6 +113,14 @@
   5. 同步状态 — 上次同步时间 + 当前状态 + [立即同步] 按钮
 - 所有文件上传到 `{URL}/简记账/` 子目录下（`Uri.encode("简记账")`）
 
+## 时间功能
+- **双层时间模型**：`Record.date` = 账单时间（用户可修改），`Record.createdAt` = 记录时间（系统自动，不可修改）
+- **DateTimePickerDialog**（`ui/components/DateTimePicker.kt`）：两步时间选择器 — 先 Material3 DatePickerDialog（选日期），确认后切换 TimePicker（选时间），24 小时制；提供 `formatDateTime(millis, pattern)` 工具函数
+- **高级记账（AddRecordScreen）**：底部备注栏左侧嵌入日历图标按钮，点击弹出 DateTimePickerDialog
+- **快速记账（DashboardScreen QuickRecordOverlay）**：类别 Chip 旁新增日期 Chip（格式 MM-dd HH:mm），未匹配类别时显示"类别"文字
+- **账单详情（RecordDetailScreen）**："账单时间"显示 `date` 且可编辑（Edit 图标），"记录时间"显示 `createdAt` 只读（灰色图标）
+- **编辑账单时间**：`RecordDao.updateBillDate()` → `LedgerRepository.updateRecordBillDate()` → `RecordDetailViewModel.updateBillDate(newDate)`，更新后自动刷新页面
+
 ## 性能注意事项
 - LazyColumn/LazyRow 必须设置 `key` 参数
 - `filter`、`map` 等集合操作必须用 `remember` 包装

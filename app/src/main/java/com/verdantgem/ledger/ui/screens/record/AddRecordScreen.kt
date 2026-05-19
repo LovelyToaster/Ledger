@@ -11,7 +11,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,6 +38,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.verdantgem.ledger.data.model.Category
+import com.verdantgem.ledger.ui.components.DateTimePickerDialog
+
 import com.verdantgem.ledger.ui.theme.WindowWidth
 import com.verdantgem.ledger.ui.theme.dimens
 import com.verdantgem.ledger.ui.theme.windowSize
@@ -89,6 +93,8 @@ fun AddRecordScreen(
     
     var selectedSub by remember { mutableStateOf("") }
     var expandedParent by remember { mutableStateOf("") }
+    var billDate by remember { mutableStateOf(System.currentTimeMillis()) }
+    var showDatePicker by remember { mutableStateOf(false) }
 
     fun save() {
         if (selectedSub.isEmpty()) {
@@ -105,7 +111,8 @@ fun AddRecordScreen(
                 amount = amt,
                 note = note,
                 categoryName = selectedSub,
-                isIncome = isIncome
+                isIncome = isIncome,
+                billDate = billDate
             )
             if (success) onBack()
         }
@@ -276,14 +283,22 @@ fun AddRecordScreen(
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                             RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
                         )
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    IconButton(onClick = { showDatePicker = true }) {
+                        Icon(
+                            Icons.Default.CalendarToday,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     TextField(
                         value = note,
                         onValueChange = { note = it },
-                        placeholder = { Text("点击输入备注...", fontSize = 14.sp) },
-                        modifier = Modifier.weight(2f),
+                        placeholder = { Text("备注", fontSize = 14.sp) },
+                        modifier = Modifier.weight(1f),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
                             unfocusedContainerColor = Color.Transparent,
@@ -292,13 +307,13 @@ fun AddRecordScreen(
                         ),
                         singleLine = true
                     )
-                    VerticalDivider(modifier = Modifier.height(24.dp).padding(horizontal = 8.dp))
+                    VerticalDivider(modifier = Modifier.height(20.dp).padding(horizontal = 6.dp))
                     Text(
                         text = amount,
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.widthIn(min = 80.dp),
                         textAlign = TextAlign.End,
                         maxLines = 1
                     )
@@ -349,6 +364,14 @@ fun AddRecordScreen(
                 }
             }
         }
+    }
+
+    if (showDatePicker) {
+        DateTimePickerDialog(
+            initialDate = billDate,
+            onConfirm = { billDate = it; showDatePicker = false },
+            onDismiss = { showDatePicker = false }
+        )
     }
 }
 

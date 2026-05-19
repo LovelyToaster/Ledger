@@ -53,9 +53,9 @@ class CategoryViewModel @Inject constructor(
         }
     }
 
-    suspend fun saveRecord(amount: Double, note: String, categoryName: String?, isIncome: Boolean): Boolean {
+    suspend fun saveRecord(amount: Double, note: String, categoryName: String?, isIncome: Boolean, billDate: Long = System.currentTimeMillis()): Boolean {
         locationDelegate.joinLocation()
-        return repository.saveRecordWithFallback(amount, note, categoryName, isIncome, locationDelegate.address)
+        return repository.saveRecordWithFallback(amount, note, categoryName, isIncome, locationDelegate.address, billDate)
     }
 
     override fun onCleared() {

@@ -174,10 +174,10 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    fun quickRecord(text: String, categoryName: String? = null, isIncome: Boolean = false) {
+    fun quickRecord(text: String, categoryName: String? = null, isIncome: Boolean = false, billDate: Long = System.currentTimeMillis()) {
         viewModelScope.launch {
             locationDelegate.joinLocation()
-            repository.quickRecord(text, categoryName, isIncome, locationDelegate.address)
+            repository.quickRecord(text, categoryName, isIncome, locationDelegate.address, billDate)
         }
     }
 

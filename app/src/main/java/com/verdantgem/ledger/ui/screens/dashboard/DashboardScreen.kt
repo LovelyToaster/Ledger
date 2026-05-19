@@ -44,6 +44,7 @@ import com.verdantgem.ledger.data.model.Budget
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
 import com.verdantgem.ledger.domain.parser.SmartParser
+import com.verdantgem.ledger.ui.components.DateTimePickerDialog
 import com.verdantgem.ledger.ui.theme.dimens
 import kotlinx.coroutines.delay
 import java.time.LocalDate
@@ -69,6 +70,8 @@ fun DashboardScreen(
     var inputText by remember { mutableStateOf("") }
     var isSheetOpen by remember { mutableStateOf(false) }
     var quickCategoryName by remember { mutableStateOf("") }
+    var quickBillDate by remember { mutableStateOf(System.currentTimeMillis()) }
+    var showDatePicker by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -267,8 +270,8 @@ fun DashboardScreen(
                 QuickRecordOverlay(
                     text = inputText,
                     onTextChange = { inputText = it },
-                    onSend = { categoryName, isIncome ->
-                        viewModel.quickRecord(inputText, categoryName, isIncome)
+                    onSend = { categoryName, isIncome, billDate ->
+                        viewModel.quickRecord(inputText, categoryName, isIncome, billDate = billDate)
                         inputText = ""
                         isSheetOpen = false
                     },
@@ -281,9 +284,19 @@ fun DashboardScreen(
                     categories = allCategories,
                     selectedCategory = quickCategoryName,
                     onCategoryChange = { quickCategoryName = it },
+                    billDate = quickBillDate,
+                    onDateClick = { showDatePicker = true },
                 )
             }
         }
+    }
+
+    if (showDatePicker) {
+        DateTimePickerDialog(
+            initialDate = quickBillDate,
+            onConfirm = { quickBillDate = it; showDatePicker = false },
+            onDismiss = { showDatePicker = false }
+        )
     }
 }
 
@@ -291,13 +304,15 @@ fun DashboardScreen(
 private fun QuickRecordOverlay(
     text: String,
     onTextChange: (String) -> Unit,
-    onSend: (categoryName: String?, isIncome: Boolean) -> Unit,
+    onSend: (categoryName: String?, isIncome: Boolean, billDate: Long) -> Unit,
     onExpand: () -> Unit,
     onDismiss: () -> Unit,
     focusRequester: FocusRequester,
     categories: List<Category>,
     selectedCategory: String,
     onCategoryChange: (String) -> Unit,
+    billDate: Long,
+    onDateClick: () -> Unit,
 ) {
     val d = MaterialTheme.dimens
     var showCategoryPicker by remember { mutableStateOf(false) }
@@ -374,7 +389,7 @@ private fun QuickRecordOverlay(
                     onTextChange = onTextChange,
                     onSend = {
                         val finalCategory = selectedCategory.ifBlank { matchedCategory?.name }
-                        onSend(finalCategory, isIncomeCat)
+                        onSend(finalCategory, isIncomeCat, billDate)
                     },
                     onExpand = onExpand,
                     focusRequester = focusRequester
@@ -382,44 +397,70 @@ private fun QuickRecordOverlay(
 
                 Spacer(modifier = Modifier.height(d.spacingSm))
 
-                if (text.isNotBlank() && matchedCategory != null) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Surface(
                         onClick = { showCategoryPicker = true },
                         shape = RoundedCornerShape(32.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        displayCatName.take(1),
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = displayCatName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
+                                    if (matchedCategory != null) displayCatName.take(1) else "类",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (matchedCategory != null) displayCatName else "类别",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Surface(
+                        onClick = onDateClick,
+                        shape = RoundedCornerShape(32.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ) {
+                        Box(
+                            modifier = Modifier.size(40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.CalendarToday,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    if (parsedAmount != null) {
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = "${if (isIncomeCat) "+ " else "- "}\uFFE5${String.format("%.2f", parsedAmount)}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isIncomeCat) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
+                Spacer(modifier = Modifier.height(2.dp))
             }
         }
     }

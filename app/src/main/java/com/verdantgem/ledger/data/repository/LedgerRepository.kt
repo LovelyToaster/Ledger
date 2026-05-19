@@ -50,18 +50,19 @@ class LedgerRepository @Inject constructor(
         ids.forEach { recordDao.softDeleteRecord(it, now) }
     }
 
-    suspend fun quickRecord(input: String, categoryName: String? = null, isIncome: Boolean = false, addressResult: AddressResult? = null): Boolean {
+    suspend fun quickRecord(input: String, categoryName: String? = null, isIncome: Boolean = false, addressResult: AddressResult? = null, billDate: Long = System.currentTimeMillis()): Boolean {
         val parseResult = SmartParser.parse(input) ?: return false
-        return saveRecordWithFallback(parseResult.amount, parseResult.note, categoryName, isIncome, addressResult)
+        return saveRecordWithFallback(parseResult.amount, parseResult.note, categoryName, isIncome, addressResult, billDate)
     }
 
-    suspend fun saveRecordWithFallback(amount: Double, note: String, categoryNameInput: String?, isIncome: Boolean, addressResult: AddressResult? = null): Boolean {
+    suspend fun saveRecordWithFallback(amount: Double, note: String, categoryNameInput: String?, isIncome: Boolean, addressResult: AddressResult? = null, billDate: Long = System.currentTimeMillis()): Boolean {
         val cat = categoryNameInput?.let { categoryDao.getCategoryByName(it) } ?: return false
         recordDao.insertRecord(Record(
             amount = amount,
             note = note,
             categoryId = cat.id,
             categoryName = cat.name,
+            date = billDate,
             address = addressResult?.address ?: "",
             latitude = addressResult?.latitude,
             longitude = addressResult?.longitude
@@ -103,6 +104,11 @@ class LedgerRepository @Inject constructor(
 
     fun getMonthlyIncomeFlow(start: Long, end: Long): Flow<Double> =
         recordDao.getMonthlyIncomeFlow(start, end)
+
+    suspend fun updateRecordBillDate(id: Long, billDate: Long) {
+        recordDao.updateBillDate(id, billDate)
+        changeNotifier.notifyChange()
+    }
 
     suspend fun saveBudget(amount: Double) {
         budgetDao.upsertBudget(Budget(monthlyAmount = amount))
