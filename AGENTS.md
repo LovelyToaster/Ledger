@@ -113,6 +113,15 @@
   5. 同步状态 — 上次同步时间 + 当前状态 + [立即同步] 按钮
 - 所有文件上传到 `{URL}/简记账/` 子目录下（`Uri.encode("简记账")`）
 
+## 快速记账类别选择
+- **类别弹窗**：`QuickRecordOverlay` 的类别选择弹窗（`DashboardScreen.kt`）新增支出/收入 FilterChip 切换，默认跟随文本解析结果（`isIncomeCat`）
+- **手动类别优先**：类别 Chip 显示优先使用 `selectedCategory`（手动选择），回退到 `matchedCategory`（文本解析），修复了手动选类别后 UI 不更新的问题
+- **匹配算法**：精确匹配名称 → 精确匹配 prompts → 包含匹配 prompts → 名称包含匹配；收入/支出类别各自匹配，若同时匹配到则返回收入
+
+## 高级记账（AddRecordScreen）自动选择类别
+- **自动匹配**：监听 `note` 字段变化，复用与快速记账相同的类别匹配算法，自动设置 `selectedSub` 和 `expandedParent`，并联动切换 `isIncome`
+- **防干扰**：`userTouchedCategory` 状态追踪用户是否手动操作过类别网格或收入/支出切换，一旦手动操作即停止自动匹配，避免覆盖用户选择
+
 ## 时间功能
 - **双层时间模型**：`Record.date` = 账单时间（用户可修改），`Record.createdAt` = 记录时间（系统自动，不可修改）
 - **DateTimePickerDialog**（`ui/components/DateTimePicker.kt`）：两步时间选择器 — 先 Material3 DatePickerDialog（选日期），确认后切换 TimePicker（选时间），24 小时制；提供 `formatDateTime(millis, pattern)` 工具函数

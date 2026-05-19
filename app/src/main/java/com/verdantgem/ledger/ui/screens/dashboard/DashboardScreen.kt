@@ -351,8 +351,12 @@ private fun QuickRecordOverlay(
             }
         }
     }
-    val isIncomeCat = matchedCategory?.isIncome == true
-    val displayCatName = matchedCategory?.name ?: ""
+    val selectedMatched = remember(selectedCategory, categories) {
+        categories.firstOrNull { it.name == selectedCategory }
+    }
+    val effectiveCategory = selectedMatched ?: matchedCategory
+    val isIncomeCat = effectiveCategory?.isIncome == true
+    val displayCatName = effectiveCategory?.name ?: ""
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -418,7 +422,7 @@ private fun QuickRecordOverlay(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    if (matchedCategory != null) displayCatName.take(1) else "类",
+                                    if (effectiveCategory != null) displayCatName.take(1) else "类",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -426,7 +430,7 @@ private fun QuickRecordOverlay(
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (matchedCategory != null) displayCatName else "类别",
+                                text = if (effectiveCategory != null) displayCatName else "类别",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium
                             )
@@ -466,9 +470,12 @@ private fun QuickRecordOverlay(
     }
 
     if (showCategoryPicker) {
-        var pickerExpandedParent by remember { mutableStateOf("") }
-        val expenseParents = categories.filter { !it.isIncome && it.parentName == null }
+        val initialParent = effectiveCategory?.parentName ?: ""
+        var pickerExpandedParent by remember { mutableStateOf(initialParent) }
+        var pickerIsIncome by remember { mutableStateOf(effectiveCategory?.isIncome ?: false) }
+        val pickerParents = categories.filter { it.isIncome == pickerIsIncome && it.parentName == null }
         val gridColumns = 4
+        val pickerEffectiveName = selectedCategory.ifBlank { effectiveCategory?.name ?: "" }
 
         AlertDialog(
             onDismissRequest = { showCategoryPicker = false },
@@ -477,9 +484,27 @@ private fun QuickRecordOverlay(
                 Column(
                     modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
                 ) {
-                    expenseParents.forEach { parent ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = !pickerIsIncome,
+                            onClick = { pickerIsIncome = false },
+                            label = { Text("支出") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = pickerIsIncome,
+                            onClick = { pickerIsIncome = true },
+                            label = { Text("收入") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    pickerParents.forEach { parent ->
                         val subs = categories.filter { it.parentName == parent.name }
                         val isExpanded = pickerExpandedParent == parent.name
+                        val hasSelected = subs.any { it.name == pickerEffectiveName }
 
                         Column(
                             modifier = Modifier
@@ -507,7 +532,7 @@ private fun QuickRecordOverlay(
                                         modifier = Modifier
                                             .size(44.dp)
                                             .background(
-                                                if (subs.any { it.name == selectedCategory }) MaterialTheme.colorScheme.primary
+                                                if (hasSelected) MaterialTheme.colorScheme.primary
                                                 else MaterialTheme.colorScheme.surfaceVariant,
                                                 CircleShape
                                             ),
@@ -515,14 +540,14 @@ private fun QuickRecordOverlay(
                                     ) {
                                         Text(
                                             parent.name.take(1),
-                                            color = if (subs.any { it.name == selectedCategory }) Color.White
+                                            color = if (hasSelected) Color.White
                                                     else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
                                         text = parent.name,
-                                        fontWeight = if (subs.any { it.name == selectedCategory }) FontWeight.Bold else FontWeight.Medium,
+                                        fontWeight = if (hasSelected) FontWeight.Bold else FontWeight.Medium,
                                         modifier = Modifier.weight(1f)
                                     )
                                     if (subs.isNotEmpty()) {
@@ -553,7 +578,7 @@ private fun QuickRecordOverlay(
                                                 Box(modifier = Modifier.weight(1f)) {
                                                     PickerCategoryItem(
                                                         label = sub.name,
-                                                        isSelected = selectedCategory == sub.name,
+                                                        isSelected = pickerEffectiveName == sub.name,
                                                         onClick = {
                                                             onCategoryChange(sub.name)
                                                             showCategoryPicker = false

@@ -95,6 +95,47 @@ fun AddRecordScreen(
     var expandedParent by remember { mutableStateOf("") }
     var billDate by remember { mutableStateOf(System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var userTouchedCategory by remember { mutableStateOf(false) }
+    val noteMatchedCategory = remember(note, allCategories) {
+        val parsedNote = note.trim().takeIf { it.isNotEmpty() } ?: return@remember null
+        fun matchIn(list: List<Category>): Category? {
+            val exact = list.firstOrNull { it.name == parsedNote }
+            if (exact != null) return exact
+            val promptExact = list.firstOrNull {
+                it.prompts.split(",", "，").any { p -> p.trim() == parsedNote }
+            }
+            if (promptExact != null) return promptExact
+            val promptContain = list.firstOrNull {
+                it.prompts.split(",", "，").any { p -> parsedNote.contains(p.trim()) || p.trim().contains(parsedNote) }
+            }
+            if (promptContain != null) return promptContain
+            return list.firstOrNull { parsedNote.contains(it.name) || it.name.contains(parsedNote) }
+        }
+        val incomeCats = allCategories.filter { it.isIncome }
+        val expenseCats = allCategories.filter { !it.isIncome }
+        val incomeMatch = matchIn(incomeCats)
+        val expenseMatch = matchIn(expenseCats)
+        val note2 = parsedNote
+        when {
+            incomeMatch != null && expenseMatch != null -> {
+                if (incomeMatch.name == note2 || incomeMatch.prompts.contains(note2)) incomeMatch
+                else if (expenseMatch.name == note2 || expenseMatch.prompts.contains(note2)) expenseMatch
+                else expenseMatch
+            }
+            incomeMatch != null -> incomeMatch
+            expenseMatch != null -> expenseMatch
+            else -> null
+        }
+    }
+    LaunchedEffect(noteMatchedCategory) {
+        if (!userTouchedCategory && noteMatchedCategory != null) {
+            selectedSub = noteMatchedCategory.name
+            isIncome = noteMatchedCategory.isIncome
+            if (noteMatchedCategory.parentName != null) {
+                expandedParent = noteMatchedCategory.parentName
+            }
+        }
+    }
 
     fun save() {
         if (selectedSub.isEmpty()) {
@@ -219,6 +260,7 @@ fun AddRecordScreen(
                                                 label = parent.name,
                                                 isSelected = expandedParent == parent.name || hasSelectedSub,
                                                 onClick = {
+                                                    userTouchedCategory = true
                                                     if (subs.isNotEmpty()) {
                                                         if (expandedParent != parent.name) selectedSub = ""
                                                         expandedParent = if (expandedParent == parent.name) "" else parent.name
@@ -259,7 +301,7 @@ fun AddRecordScreen(
                                                             CategoryItem(
                                                                 label = sub.name,
                                                                 isSelected = selectedSub == sub.name,
-                                                                onClick = { selectedSub = sub.name }
+                                                                onClick = { userTouchedCategory = true; selectedSub = sub.name }
                                                             )
                                                         }
                                                     }
