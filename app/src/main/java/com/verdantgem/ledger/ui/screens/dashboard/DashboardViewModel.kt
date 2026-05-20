@@ -18,8 +18,8 @@ import kotlinx.coroutines.launch
 import java.util.*
 import javax.inject.Inject
 
-private val currentMonthStart: Long by lazy {
-    Calendar.getInstance().apply {
+private fun currentMonthStart(): Long {
+    return Calendar.getInstance().apply {
         set(Calendar.DAY_OF_MONTH, 1)
         set(Calendar.HOUR_OF_DAY, 0)
         set(Calendar.MINUTE, 0)
@@ -28,8 +28,8 @@ private val currentMonthStart: Long by lazy {
     }.timeInMillis
 }
 
-private val currentMonthEnd: Long by lazy {
-    Calendar.getInstance().apply {
+private fun currentMonthEnd(): Long {
+    return Calendar.getInstance().apply {
         set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
         set(Calendar.HOUR_OF_DAY, 23)
         set(Calendar.MINUTE, 59)
@@ -101,10 +101,26 @@ class DashboardViewModel @Inject constructor(
 
     fun stopLocation() = locationDelegate.stopLocation()
 
+    private val _refreshBalance = MutableStateFlow(0)
+
+    private val _refreshTrigger = MutableStateFlow(0)
+
+    fun onResume() {
+        _refreshTrigger.value++
+    }
+
+    init {
+        viewModelScope.launch {
+            repository.allCategories.collectLatest {
+                _refreshBalance.value++
+            }
+        }
+    }
+
     val allCategories: StateFlow<List<Category>> = repository.allCategories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val pagedItems: Flow<PagingData<DashboardItem>> = _searchQuery
+    val pagedItems: Flow<PagingData<DashboardItem>> = combine(_searchQuery, _refreshTrigger) { query, _ -> query }
         .flatMapLatest { query -> repository.getRecordsPaged(query) }
         .map { pagingData ->
             pagingData
@@ -121,25 +137,15 @@ class DashboardViewModel @Inject constructor(
         }
         .cachedIn(viewModelScope)
 
-    private val _refreshBalance = MutableStateFlow(0)
-
-    init {
-        viewModelScope.launch {
-            repository.allCategories.collectLatest {
-                _refreshBalance.value++
-            }
-        }
-    }
-
     val budget: StateFlow<Budget?> = repository.budgetFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val monthlyExpense: StateFlow<Double> = _refreshBalance
-        .flatMapLatest { repository.getMonthlyExpenseFlow(currentMonthStart, currentMonthEnd) }
+    val monthlyExpense: StateFlow<Double> = combine(_refreshBalance, _refreshTrigger) { bal, _ -> bal }
+        .flatMapLatest { repository.getMonthlyExpenseFlow(currentMonthStart(), currentMonthEnd()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
-    val monthlyIncome: StateFlow<Double> = _refreshBalance
-        .flatMapLatest { repository.getMonthlyIncomeFlow(currentMonthStart, currentMonthEnd) }
+    val monthlyIncome: StateFlow<Double> = combine(_refreshBalance, _refreshTrigger) { bal, _ -> bal }
+        .flatMapLatest { repository.getMonthlyIncomeFlow(currentMonthStart(), currentMonthEnd()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     val monthlySurplus: StateFlow<Double> = combine(monthlyIncome, monthlyExpense) { inc, exp -> inc - exp }

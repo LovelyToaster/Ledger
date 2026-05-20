@@ -73,7 +73,7 @@ class SettingsViewModel @Inject constructor(
         loadConfig()
     }
 
-    private fun loadConfig() {
+    fun loadConfig() {
         webDavUrl = prefs.getString("webdav_url", "") ?: ""
         webDavUser = prefs.getString("webdav_user", "") ?: ""
         webDavPass = prefs.getString("webdav_pass", "") ?: ""
