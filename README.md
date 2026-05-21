@@ -14,7 +14,7 @@
 
 ## 下载
 
-前往 [GitHub Releases](https://github.com/{owner}/{repo}/releases) 下载最新 APK。
+前往 [GitHub Releases](https://github.com/LovelyToaster/Ledger/releases) 下载最新 APK。
 
 ## 技术栈
 
