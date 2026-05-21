@@ -114,8 +114,8 @@
 - 所有文件上传到 `{URL}/简记账/` 子目录下（`Uri.encode("简记账")`）
 
 ## 快速记账类别选择
-- **类别弹窗**：`QuickRecordOverlay` 的类别选择弹窗（`DashboardScreen.kt`）新增支出/收入 FilterChip 切换，默认跟随文本解析结果（`isIncomeCat`）
-- **手动类别优先**：类别 Chip 显示优先使用 `selectedCategory`（手动选择），回退到 `matchedCategory`（文本解析），修复了手动选类别后 UI 不更新的问题
+- **类别选择**：`QuickRecordOverlay` 内部使用 `QuickCategoryPicker`（内联于 Surface 中），不再使用 AlertDialog；显示父类别为标签头、子类别为平铺网格（4列）
+- **手动类别优先**：类别 Chip 显示优先使用 `selectedCategory`（手动选择），回退到 `matchedCategory`（文本解析）
 - **匹配算法**：精确匹配名称 → 精确匹配 prompts → 包含匹配 prompts → 名称包含匹配；收入/支出类别各自匹配，若同时匹配到则返回收入
 
 ## 高级记账（AddRecordScreen）自动选择类别
@@ -129,6 +129,20 @@
 - **快速记账（DashboardScreen QuickRecordOverlay）**：类别 Chip 旁新增日期 Chip（格式 MM-dd HH:mm），未匹配类别时显示"类别"文字
 - **账单详情（RecordDetailScreen）**："账单时间"显示 `date` 且可编辑（Edit 图标），"记录时间"显示 `createdAt` 只读（灰色图标）
 - **编辑账单时间**：`RecordDao.updateBillDate()` → `LedgerRepository.updateRecordBillDate()` → `RecordDetailViewModel.updateBillDate(newDate)`，更新后自动刷新页面
+
+## 主界面时间轴
+- **分组标题**：`DashboardViewModel.getDateGroupLabel()` 保留 "今天""昨天" 为文字标签，其余显示具体日期
+- **日期格式**：本年显示 `MM-dd`（如 `03-15`），非本年显示 `yyyy-MM-dd`（如 `2025-12-01`）
+
+## 统计界面排名列表
+- **数据**：`StatisticsViewModel.activeRanking`（`StateFlow<List<CategoryRank>>`），从 `activeCategoryDistribution` 派生，按金额降序，含百分比
+- **UI 组件**：`CategoryRankingList`（`StatisticsScreen.kt`），位于饼图下方，每行含分类名 + LinearProgressIndicator + 百分比 + 金额
+- **柱状图**：`SimpleBarChart` 点击柱子弹出悬浮框，显示时间标签 + 收支类型 + 金额；Y轴刻度显示整数
+- **饼图**：`CategoryPieChart` 用连线在饼图内直接显示标签名称和百分比，不再使用图例
+- **标题显示**："分类收入占比" → "收入占比"，"分类支出占比" → "支出占比"
+- **快捷切换**：占比/明细标题行右侧嵌入 `CompactToggle` 组件（切换支出/收入）+ `TextButton`（切换一级/二级分类）
+- **分类层级**：`showDetail` 控制一级（父类别汇总）或二级（子类别）显示，`activeCategoryDistribution` 自动切换，默认一级
+- **小数精度**：统计页面所有数值统一保留两位小数（柱状图Y轴/标签、饼图、排名列表百分比和金额）
 
 ## 性能注意事项
 - LazyColumn/LazyRow 必须设置 `key` 参数

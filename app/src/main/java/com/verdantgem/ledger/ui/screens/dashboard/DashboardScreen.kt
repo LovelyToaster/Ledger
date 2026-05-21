@@ -400,226 +400,208 @@ private fun QuickRecordOverlay(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                QuickInputBar(
-                    text = text,
-                    onTextChange = onTextChange,
-                    onSend = {
-                        val finalCategory = selectedCategory.ifBlank { matchedCategory?.name }
-                        onSend(finalCategory, isIncomeCat, billDate)
-                    },
-                    onExpand = onExpand,
-                    focusRequester = focusRequester
-                )
+                if (showCategoryPicker) {
+                    QuickCategoryPicker(
+                        categories = categories,
+                        selectedCategory = selectedCategory,
+                        effectiveCategory = effectiveCategory,
+                        onCategoryChange = { name ->
+                            onCategoryChange(name)
+                            showCategoryPicker = false
+                        },
+                        onDismiss = { showCategoryPicker = false }
+                    )
+                } else {
+                    QuickInputBar(
+                        text = text,
+                        onTextChange = onTextChange,
+                        onSend = {
+                            val finalCategory = selectedCategory.ifBlank { matchedCategory?.name }
+                            onSend(finalCategory, isIncomeCat, billDate)
+                        },
+                        onExpand = onExpand,
+                        focusRequester = focusRequester
+                    )
 
-                Spacer(modifier = Modifier.height(d.spacingSm))
+                    Spacer(modifier = Modifier.height(d.spacingSm))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        onClick = { showCategoryPicker = true },
-                        shape = RoundedCornerShape(32.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            onClick = { showCategoryPicker = true },
+                            shape = RoundedCornerShape(32.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        if (effectiveCategory != null) displayCatName.take(1) else "类",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (effectiveCategory != null) displayCatName else "类别",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                        Surface(
+                            onClick = onDateClick,
+                            shape = RoundedCornerShape(32.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                         ) {
                             Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                                modifier = Modifier.size(40.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    if (effectiveCategory != null) displayCatName.take(1) else "类",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Icon(
+                                    Icons.Default.CalendarToday,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (effectiveCategory != null) displayCatName else "类别",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
                         }
-                    }
-                    Surface(
-                        onClick = onDateClick,
-                        shape = RoundedCornerShape(32.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ) {
-                        Box(
-                            modifier = Modifier.size(40.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.CalendarToday,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
 
-                    if (parsedAmount != null) {
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            text = "${if (isIncomeCat) "+ " else "- "}\uFFE5${String.format("%.2f", parsedAmount)}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isIncomeCat) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                        )
+                        if (parsedAmount != null) {
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                text = "${if (isIncomeCat) "+ " else "- "}\uFFE5${String.format("%.2f", parsedAmount)}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isIncomeCat) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
+                    Spacer(modifier = Modifier.height(2.dp))
                 }
-                Spacer(modifier = Modifier.height(2.dp))
             }
         }
-    }
-
-    if (showCategoryPicker) {
-        val initialParent = effectiveCategory?.parentName ?: ""
-        var pickerExpandedParent by remember { mutableStateOf(initialParent) }
-        var pickerIsIncome by remember { mutableStateOf(effectiveCategory?.isIncome ?: false) }
-        val pickerParents = categories.filter { it.isIncome == pickerIsIncome && it.parentName == null }
-        val gridColumns = 4
-        val pickerEffectiveName = selectedCategory.ifBlank { effectiveCategory?.name ?: "" }
-
-        AlertDialog(
-            onDismissRequest = { showCategoryPicker = false },
-            title = { Text("选择分类") },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = !pickerIsIncome,
-                            onClick = { pickerIsIncome = false },
-                            label = { Text("支出") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        FilterChip(
-                            selected = pickerIsIncome,
-                            onClick = { pickerIsIncome = true },
-                            label = { Text("收入") },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    pickerParents.forEach { parent ->
-                        val subs = categories.filter { it.parentName == parent.name }
-                        val isExpanded = pickerExpandedParent == parent.name
-                        val hasSelected = subs.any { it.name == pickerEffectiveName }
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .background(
-                                    if (isExpanded) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.08f)
-                                    else Color.Transparent,
-                                    RoundedCornerShape(16.dp)
-                                )
-                        ) {
-                            Surface(
-                                onClick = {
-                                    pickerExpandedParent = if (isExpanded) "" else parent.name
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color.Transparent,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(44.dp)
-                                            .background(
-                                                if (hasSelected) MaterialTheme.colorScheme.primary
-                                                else MaterialTheme.colorScheme.surfaceVariant,
-                                                CircleShape
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            parent.name.take(1),
-                                            color = if (hasSelected) Color.White
-                                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = parent.name,
-                                        fontWeight = if (hasSelected) FontWeight.Bold else FontWeight.Medium,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    if (subs.isNotEmpty()) {
-                                        Icon(
-                                            if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(20.dp),
-                                            tint = MaterialTheme.colorScheme.outline
-                                        )
-                                    }
-                                }
-                            }
-
-                            if (isExpanded && subs.isNotEmpty()) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    val chunked = subs.chunked(gridColumns)
-                                    chunked.forEach { row ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            row.forEach { sub ->
-                                                Box(modifier = Modifier.weight(1f)) {
-                                                    PickerCategoryItem(
-                                                        label = sub.name,
-                                                        isSelected = pickerEffectiveName == sub.name,
-                                                        onClick = {
-                                                            onCategoryChange(sub.name)
-                                                            showCategoryPicker = false
-                                                        }
-                                                    )
-                                                }
-                                            }
-                                            if (row.size < gridColumns) {
-                                                repeat(gridColumns - row.size) {
-                                                    Spacer(modifier = Modifier.weight(1f))
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showCategoryPicker = false }) { Text("取消") }
-            }
-        )
     }
 
     LaunchedEffect(Unit) {
         delay(100)
         focusRequester.requestFocus()
+    }
+}
+
+@Composable
+private fun QuickCategoryPicker(
+    categories: List<Category>,
+    selectedCategory: String,
+    effectiveCategory: Category?,
+    onCategoryChange: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var pickerIsIncome by remember { mutableStateOf(effectiveCategory?.isIncome ?: false) }
+    val pickerParents = categories.filter { it.isIncome == pickerIsIncome && it.parentName == null }
+    val gridColumns = 4
+    val pickerEffectiveName = selectedCategory.ifBlank { effectiveCategory?.name ?: "" }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("选择分类", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            TextButton(onClick = onDismiss) { Text("完成") }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = !pickerIsIncome,
+                onClick = { pickerIsIncome = false },
+                label = { Text("支出") },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = pickerIsIncome,
+                onClick = { pickerIsIncome = true },
+                label = { Text("收入") },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 350.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            pickerParents.forEach { parent ->
+                val subs = categories.filter { it.parentName == parent.name }
+
+                Text(
+                    text = parent.name,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
+                )
+
+                if (subs.isNotEmpty()) {
+                    val subChunked = subs.chunked(gridColumns)
+                    subChunked.forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            row.forEach { sub ->
+                                Box(modifier = Modifier.weight(1f)) {
+                                    PickerCategoryItem(
+                                        label = sub.name,
+                                        isSelected = pickerEffectiveName == sub.name,
+                                        onClick = { onCategoryChange(sub.name) }
+                                    )
+                                }
+                            }
+                            repeat(gridColumns - row.size) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            PickerCategoryItem(
+                                label = parent.name,
+                                isSelected = pickerEffectiveName == parent.name,
+                                onClick = { onCategoryChange(parent.name) }
+                            )
+                        }
+                        repeat(gridColumns - 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

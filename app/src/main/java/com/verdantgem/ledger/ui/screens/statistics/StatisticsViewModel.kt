@@ -12,6 +12,8 @@ import javax.inject.Inject
 
 enum class StatsMode { RECENT, MONTH, YEAR }
 
+data class CategoryRank(val name: String, val amount: Float, val percentage: Float)
+
 @HiltViewModel
 class StatisticsViewModel @Inject constructor(
     private val repository: LedgerRepository
@@ -162,6 +164,71 @@ class StatisticsViewModel @Inject constructor(
             .mapValues { it.value.sumOf { r -> r.amount }.toFloat() }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
+    val categoryRanking: StateFlow<List<CategoryRank>> = categoryDistribution.map { map ->
+        val total = map.values.sum()
+        map.entries
+            .map { CategoryRank(it.key, it.value, if (total > 0f) it.value / total else 0f) }
+            .sortedByDescending { it.amount }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _showDetail = MutableStateFlow(false)
+    val showDetail: StateFlow<Boolean> = _showDetail
+
+    private val parentCategoryDistribution: StateFlow<Map<String, Float>> = combine(
+        repository.allRecords, _mode, _selectedDate, _isCategoryIncome, repository.allCategories
+    ) { records, currentMode, date, showIncome, categories ->
+        if (records.isEmpty()) return@combine emptyMap<String, Float>()
+
+        val incomeNames = categories.filter { it.isIncome }.map { it.name }.toSet()
+        val calendar = Calendar.getInstance()
+        val filtered = when (currentMode) {
+            StatsMode.RECENT -> {
+                val cal = Calendar.getInstance().apply {
+                    firstDayOfWeek = Calendar.MONDAY
+                    set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                records.filter { it.date >= cal.timeInMillis }
+            }
+            StatsMode.MONTH -> records.filter {
+                calendar.timeInMillis = it.date
+                calendar.get(Calendar.YEAR) == date.get(Calendar.YEAR) && calendar.get(Calendar.MONTH) == date.get(Calendar.MONTH)
+            }
+            StatsMode.YEAR -> records.filter {
+                calendar.timeInMillis = it.date
+                calendar.get(Calendar.YEAR) == date.get(Calendar.YEAR)
+            }
+        }
+
+        val typeFiltered = filtered.filter {
+            if (showIncome) it.categoryName in incomeNames
+            else it.categoryName !in incomeNames
+        }
+
+        val parentMap = categories.filter { it.parentName != null }.associate { it.name to it.parentName!! }
+        typeFiltered.groupBy { parentMap[it.categoryName] ?: it.categoryName }
+            .mapValues { it.value.sumOf { r -> r.amount }.toFloat() }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    val activeCategoryDistribution: StateFlow<Map<String, Float>> = combine(
+        categoryDistribution, parentCategoryDistribution, _showDetail
+    ) { detail, parent, showDetail -> if (showDetail) detail else parent }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    val activeRanking: StateFlow<List<CategoryRank>> = activeCategoryDistribution.map { map ->
+        val total = map.values.sum()
+        map.entries
+            .map { CategoryRank(it.key, it.value, if (total > 0f) it.value / total else 0f) }
+            .sortedByDescending { it.amount }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun toggleDetail() {
+        _showDetail.value = !_showDetail.value
+    }
+
     fun toggleCategoryType() {
         _isCategoryIncome.value = !_isCategoryIncome.value
     }
@@ -183,6 +250,7 @@ class StatisticsViewModel @Inject constructor(
     fun resetToDefault() {
         _mode.value = StatsMode.RECENT
         _isCategoryIncome.value = false
+        _showDetail.value = false
         _selectedDate.value = Calendar.getInstance()
     }
 }

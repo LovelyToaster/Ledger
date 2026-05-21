@@ -287,7 +287,7 @@ fun AddRecordScreen(
                                                     MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.08f),
                                                     RoundedCornerShape(16.dp)
                                                 )
-                                                .padding(12.dp),
+                                                .padding(vertical = 12.dp),
                                             verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             val subChunked = subs.chunked(gridColumns)

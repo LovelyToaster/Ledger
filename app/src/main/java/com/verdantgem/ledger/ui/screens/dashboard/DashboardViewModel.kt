@@ -15,6 +15,7 @@ import com.verdantgem.ledger.data.repository.LedgerRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
 
@@ -63,21 +64,11 @@ private fun getDateGroupLabel(dateMillis: Long): String {
         return "昨天"
     }
 
-    val weekStart = Calendar.getInstance().apply {
-        timeInMillis = today.timeInMillis
-        firstDayOfWeek = Calendar.MONDAY
-        set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+    return if (recordCal.get(Calendar.YEAR) == today.get(Calendar.YEAR)) {
+        SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(dateMillis))
+    } else {
+        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(dateMillis))
     }
-    if (recordCal >= weekStart) {
-        return "本周"
-    }
-
-    if (recordCal.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
-        recordCal.get(Calendar.MONTH) == today.get(Calendar.MONTH)) {
-        return "本月"
-    }
-
-    return "更早"
 }
 
 @HiltViewModel
