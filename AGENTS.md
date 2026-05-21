@@ -2,7 +2,7 @@
 
 ## 项目信息
 - 包名：`com.verdantgem.ledger`
-- 技术栈：Kotlin + Jetpack Compose + Hilt + Room + Paging 3 + OkHttp
+- 技术栈：Kotlin + Jetpack Compose + Hilt + Room + Paging 3 + OkHttp + Apache POI (XLS)
 - 最低 SDK：26 (Android 8.0)
 - 目标 SDK：36 (Android 16)
 
@@ -47,6 +47,11 @@
 - **分页**：使用 Paging 3，pageSize = 20，initialLoadSize = 20
 - **数据库查询**：聚合计算（SUM）在 SQL 层完成，不把全量数据加载到 Kotlin 层
 - **线程安全**：所有网络请求和文件 IO 必须使用 `withContext(Dispatchers.IO)`
+
+## 主题设置
+- **入口**：`SettingsScreen` 顶部"主题设置"ListItem，右侧显示当前模式
+- **ThemeSettingScreen**：独立管理页面，三种模式：跟随系统 / 浅色 / 深色
+- **ThemeMode**：`ThemeMode.SYSTEM` / `LIGHT` / `DARK`，存储在 `SharedPreferences`
 
 ## 数据同步（WebDAV）
 ### 新增依赖
@@ -113,6 +118,14 @@
   5. 同步状态 — 上次同步时间 + 当前状态 + [立即同步] 按钮
 - 所有文件上传到 `{URL}/简记账/` 子目录下（`Uri.encode("简记账")`）
 
+## 账单导入功能（XLS）
+- **依赖**：`org.apache.poi:poi:5.2.5`（`gradle/libs.versions.toml` → `apache-poi`）
+- **导入器**：`XlsImporter`（Hilt `@Singleton`），解析 .xls 文件（HSSFWorkbook），支持多列索引（日期/收支类型/金额/一级分类/二级分类/备注/地址）
+- **匹配策略**：子分类精确匹配 → 一级分类精确匹配 → 按收支类型兜底 → 任意可用分类
+- **UI 流程**：`SettingsScreen` → "导入导出" → `ImportExportScreen` → SAF 文件选择 → 解析预览（总条数/支出/收入/匹配/不匹配） → 带进度条批量导入
+- **数据变更通知**：批量导入完成后触发 `DataChangeNotifier` 一次，避免逐条触发
+- **R8 保留规则**：`proguard-rules.pro` 中 `pickFirst "/META-INF/services/**"` 确保 POI ServiceLoader 正常工作
+
 ## 快速记账类别选择
 - **类别选择**：`QuickRecordOverlay` 内部使用 `QuickCategoryPicker`（内联于 Surface 中），不再使用 AlertDialog；显示父类别为标签头、子类别为平铺网格（4列）
 - **手动类别优先**：类别 Chip 显示优先使用 `selectedCategory`（手动选择），回退到 `matchedCategory`（文本解析）
@@ -143,6 +156,29 @@
 - **快捷切换**：占比/明细标题行右侧嵌入 `CompactToggle` 组件（切换支出/收入）+ `TextButton`（切换一级/二级分类）
 - **分类层级**：`showDetail` 控制一级（父类别汇总）或二级（子类别）显示，`activeCategoryDistribution` 自动切换，默认一级
 - **小数精度**：统计页面所有数值统一保留两位小数（柱状图Y轴/标签、饼图、排名列表百分比和金额）
+
+### 统计模式与日期导航
+- **StatsMode** 三种模式：日常（RECENT，本周逐日查看）、月（MONTH，当月逐日）、年（YEAR，当年逐月），通过 Tab 切换
+- **日期导航**：月模式下显示 `yyyy年MM月`，年模式下显示 `yyyy年`，左右箭头切换上一月/年
+- **生命周期**：离开统计页面时（ON_PAUSE）自动重置为默认模式（日常/支出/一级分类）
+
+### 环比对比功能
+- **对比周期**：日常模式对比上周、月模式对比上月、年模式对比上年
+- **数据源**：`StatisticsViewModel.prevPeriodDistribution` 独立计算上一周期分布，`activeComparisonMap` 逐分类计算差值
+- **展示方式**：`CategoryRankingList` 每行进度条下方右对齐显示对比信息（↑/↓ 百分比 + 金额）
+- **颜色规则**：支出上升（更差）→ 红色 `#E53935`，支出下降（更好）→ 绿色 `#43A047`；收入上升（更好）→ 绿色，收入下降（更差）→ 红色；新增分类 → 蓝色 `#1E88E5`；持平 → 灰色
+- **金额符号**：支出带 `-` 前缀，收入带 `+` 前缀，均保留两位小数
+
+## 生命周期与数据刷新
+- **DashboardScreen**：使用 `DisposableEffect` + `LifecycleEventObserver` 监听 ON_RESUME → `viewModel.onResume()`，修复切回前台后日期/月度统计不刷新
+- **WebDavConfigScreen**：ON_RESUME → `viewModel.loadConfig()`，修复同步时间不刷新
+- **StatisticsScreen**：ON_PAUSE → `viewModel.resetToDefault()`，离开时重置统计模式
+
+## 默认类别（DefaultCategories.kt）
+- **初始化**：`LedgerRepository.seedDefaultCategories()` 在数据库类别数为 0 时写入默认类别；`resetToDefaultCategories()` 可重置
+- **支出父类别**：出行交通、购物消费、健康医疗、居家生活、其他、食品餐饮、送礼人情、文化教育、休闲娱乐、快递
+- **收入父类别**：收入
+- **子类别示例**：打车（出行交通）、生鲜食品（食品餐饮）、奖金/奖学金/工资（收入）等；每个子类别带有 prompts 用于快速记账文本匹配
 
 ## 性能注意事项
 - LazyColumn/LazyRow 必须设置 `key` 参数
