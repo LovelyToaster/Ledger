@@ -72,12 +72,6 @@ fun AboutScreen(onNavigateToSettings: () -> Unit) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(d.spacingLg))
-            Text(
-                text = "Made with ❤️ for Android",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline
-            )
         }
     }
 }

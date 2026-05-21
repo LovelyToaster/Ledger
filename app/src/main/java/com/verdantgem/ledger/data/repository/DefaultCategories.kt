@@ -13,6 +13,7 @@ object DefaultCategories {
         Category(name = "送礼人情", isIncome = false),
         Category(name = "文化教育", isIncome = false),
         Category(name = "休闲娱乐", isIncome = false),
+        Category(name = "快递", isIncome = false, prompts = "快递"),
         Category(name = "收入", isIncome = true),
 
         Category(name = "打车", parentName = "出行交通", prompts = "打车", isIncome = false),
@@ -73,7 +74,8 @@ object DefaultCategories {
         Category(name = "补贴", parentName = "收入", prompts = "补贴,补助,津贴", isIncome = true),
         Category(name = "二手闲置", parentName = "收入", prompts = "二手,闲置,卖掉,转卖", isIncome = true),
         Category(name = "工资", parentName = "收入", prompts = "工资,薪水,薪资,月薪", isIncome = true),
-        Category(name = "奖金", parentName = "收入", prompts = "奖金,年终奖,绩效", isIncome = true),
+        Category(name = "奖金", parentName = "收入", prompts = "奖金,年终奖,绩效,奖学金", isIncome = true),
+        Category(name = "奖学金", parentName = "收入", prompts = "奖学金", isIncome = true),
         Category(name = "其他", parentName = "收入", prompts = "其他收入,理财,利息", isIncome = true),
     )
 }
