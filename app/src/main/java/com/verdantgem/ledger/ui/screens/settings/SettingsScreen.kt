@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -18,6 +19,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onNavigateToWebDav: () -> Unit,
     onNavigateToTheme: () -> Unit,
+    onNavigateToImportExport: () -> Unit,
     themeMode: com.verdantgem.ledger.ui.theme.ThemeMode
 ) {
     Scaffold(
@@ -49,6 +51,16 @@ fun SettingsScreen(
                 modifier = Modifier.clickable { onNavigateToTheme() }
             )
             
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), thickness = 0.5.dp)
+
+            ListItem(
+                headlineContent = { Text("导入导出") },
+                supportingContent = { Text("从文件导入账单数据") },
+                leadingContent = { Icon(Icons.Default.FileUpload, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
+                modifier = Modifier.clickable { onNavigateToImportExport() }
+            )
+
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), thickness = 0.5.dp)
 
             ListItem(

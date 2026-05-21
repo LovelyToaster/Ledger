@@ -120,6 +120,26 @@ class LedgerRepository @Inject constructor(
         changeNotifier.notifyChange()
     }
 
+    suspend fun getAllCategoriesList(): List<Category> = categoryDao.getAllCategoriesList()
+
+    /**
+     * 批量导入 Record，每条使用独立 id（自增），最后触发一次同步通知
+     * @param onProgress 每 50 条回调一次进度，参数为当前已插入条数
+     */
+    suspend fun insertRecords(records: List<Record>, onProgress: (Int) -> Unit = {}): Int {
+        var count = 0
+        val total = records.size
+        for (record in records) {
+            recordDao.insertRecord(record)
+            count++
+            if (count % 50 == 0 || count == total) {
+                onProgress(count)
+            }
+        }
+        if (count > 0) changeNotifier.notifyChange()
+        return count
+    }
+
     suspend fun seedDefaultCategories() {
         if (categoryDao.getCategoryCount() > 0) return
         categoryDao.insertCategories(DefaultCategories.getAll())

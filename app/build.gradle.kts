@@ -60,10 +60,9 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            pickFirsts += "/META-INF/services/**"
         }
     }
-    compileSdkMinor = 1
-    ndkVersion = "30.0.14904198 rc1"
 }
 
 dependencies {
@@ -109,6 +108,9 @@ dependencies {
 
     // Amap Location
     implementation(libs.amap.location)
+
+    // Apache POI (XLS import)
+    implementation(libs.apache.poi)
 
     implementation(libs.androidx.appcompat)
     implementation(libs.material)

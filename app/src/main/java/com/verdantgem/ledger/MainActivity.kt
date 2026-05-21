@@ -168,6 +168,7 @@ class MainActivity : ComponentActivity() {
                                 onBack = { navController.popBackStack() },
                                 onNavigateToWebDav = { navController.navigate("webdav_config") },
                                 onNavigateToTheme = { navController.navigate("theme_setting") },
+                                onNavigateToImportExport = { navController.navigate("import_export") },
                                 themeMode = themeMode
                             )
                         }
@@ -182,6 +183,11 @@ class MainActivity : ComponentActivity() {
                             com.verdantgem.ledger.ui.screens.settings.WebDavConfigScreen(
                                 onBack = { navController.popBackStack() },
                                 settingsViewModel = settingsViewModel
+                            )
+                        }
+                        composable("import_export") {
+                            com.verdantgem.ledger.ui.screens.settings.ImportExportScreen(
+                                onBack = { navController.popBackStack() }
                             )
                         }
                         composable("budget_edit") {
