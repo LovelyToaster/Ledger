@@ -14,6 +14,12 @@ enum class StatsMode { RECENT, MONTH, YEAR }
 
 data class CategoryRank(val name: String, val amount: Float, val percentage: Float)
 
+data class CategoryComparisonInfo(
+    val changeAmount: Float,
+    val changePercent: Float,
+    val previousAmount: Float
+)
+
 @HiltViewModel
 class StatisticsViewModel @Inject constructor(
     private val repository: LedgerRepository
@@ -225,6 +231,44 @@ class StatisticsViewModel @Inject constructor(
             .sortedByDescending { it.amount }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val prevPeriodDistribution: StateFlow<Pair<Map<String, Float>, Map<String, Float>>> = combine(
+        repository.allRecords, _mode, _selectedDate, _isCategoryIncome, repository.allCategories
+    ) { records, currentMode, date, showIncome, categories ->
+        val incomeNames = categories.filter { it.isIncome }.map { it.name }.toSet()
+        val (prevStart, prevEnd) = getPreviousPeriodRange(currentMode, date)
+
+        val prevFiltered = records.filter { it.date >= prevStart && it.date <= prevEnd }
+        val typeFiltered = prevFiltered.filter {
+            if (showIncome) it.categoryName in incomeNames
+            else it.categoryName !in incomeNames
+        }
+
+        val subDist = typeFiltered.groupBy { it.categoryName }
+            .mapValues { it.value.sumOf { r -> r.amount }.toFloat() }
+
+        val parentMap = categories.filter { it.parentName != null }
+            .associate { it.name to it.parentName!! }
+        val parentDist = typeFiltered.groupBy { parentMap[it.categoryName] ?: it.categoryName }
+            .mapValues { it.value.sumOf { r -> r.amount }.toFloat() }
+
+        Pair(subDist, parentDist)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Pair(emptyMap(), emptyMap()))
+
+    val activeComparisonMap: StateFlow<Map<String, CategoryComparisonInfo>> = combine(
+        activeCategoryDistribution, prevPeriodDistribution, _showDetail
+    ) { currentDist, (prevSub, prevParent), showDetail ->
+        if (currentDist.isEmpty()) return@combine emptyMap<String, CategoryComparisonInfo>()
+
+        val prevDist = if (showDetail) prevSub else prevParent
+
+        currentDist.mapValues { (name, currentAmount) ->
+            val prevAmount = prevDist[name] ?: 0f
+            val changeAmount = currentAmount - prevAmount
+            val changePercent = if (prevAmount > 0f) changeAmount / prevAmount else Float.NaN
+            CategoryComparisonInfo(changeAmount, changePercent, prevAmount)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     fun toggleDetail() {
         _showDetail.value = !_showDetail.value
     }
@@ -252,5 +296,36 @@ class StatisticsViewModel @Inject constructor(
         _isCategoryIncome.value = false
         _showDetail.value = false
         _selectedDate.value = Calendar.getInstance()
+    }
+
+    private fun getPreviousPeriodRange(mode: StatsMode, date: Calendar): Pair<Long, Long> {
+        val cal = date.clone() as Calendar
+        return when (mode) {
+            StatsMode.RECENT -> {
+                cal.firstDayOfWeek = Calendar.MONDAY
+                cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                val thisMonday = cal.timeInMillis
+                cal.add(Calendar.DAY_OF_WEEK, -7)
+                Pair(cal.timeInMillis, thisMonday - 1)
+            }
+            StatsMode.MONTH -> {
+                cal.clear()
+                cal.set(date.get(Calendar.YEAR), date.get(Calendar.MONTH), 1)
+                val thisMonthStart = cal.timeInMillis
+                cal.add(Calendar.MONTH, -1)
+                Pair(cal.timeInMillis, thisMonthStart - 1)
+            }
+            StatsMode.YEAR -> {
+                cal.clear()
+                cal.set(date.get(Calendar.YEAR), 0, 1)
+                val thisYearStart = cal.timeInMillis
+                cal.add(Calendar.YEAR, -1)
+                Pair(cal.timeInMillis, thisYearStart - 1)
+            }
+        }
     }
 }

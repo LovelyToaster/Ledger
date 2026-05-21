@@ -54,6 +54,7 @@ fun StatisticsScreen(
     val labels by viewModel.chartLabels.collectAsState()
     val ranking by viewModel.activeRanking.collectAsState()
     val showDetail by viewModel.showDetail.collectAsState()
+    val comparisonMap by viewModel.activeComparisonMap.collectAsState()
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -198,7 +199,18 @@ fun CompactToggle(isIncome: Boolean, onToggle: () -> Unit) {
 }
 
 @Composable
-fun CategoryRankingList(ranking: List<CategoryRank>, modifier: Modifier = Modifier) {
+fun CategoryRankingList(
+    ranking: List<CategoryRank>,
+    comparisonMap: Map<String, CategoryComparisonInfo>,
+    isIncome: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val expenseColor = Color(0xFFE53935)
+    val incomeColor = Color(0xFF43A047)
+    val newColor = Color(0xFF1E88E5)
+    val amountColor = if (isIncome) incomeColor else expenseColor
+    val amountPrefix = if (isIncome) "+" else "-"
+
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
@@ -209,6 +221,7 @@ fun CategoryRankingList(ranking: List<CategoryRank>, modifier: Modifier = Modifi
         }
 
         ranking.forEach { item ->
+            val comparison = comparisonMap[item.name]
             Column(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -226,9 +239,10 @@ fun CategoryRankingList(ranking: List<CategoryRank>, modifier: Modifier = Modifi
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = String.format("%.2f", item.amount),
+                        text = "$amountPrefix${String.format("%.2f", item.amount)}",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        color = amountColor
                     )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
@@ -238,6 +252,36 @@ fun CategoryRankingList(ranking: List<CategoryRank>, modifier: Modifier = Modifi
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
+                if (comparison != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        val increaseColor = if (isIncome) incomeColor else expenseColor
+                        val decreaseColor = if (isIncome) expenseColor else incomeColor
+
+                        @Composable
+                        fun Label() {
+                            // 新增（上期无此分类）
+                            if (comparison.previousAmount <= 0f && comparison.changeAmount > 0f) {
+                                Text(text = "新增", style = MaterialTheme.typography.bodySmall, color = newColor)
+                                return@Label
+                            }
+                            // 持平（无变化）
+                            if (comparison.changeAmount == 0f) {
+                                Text(text = "持平", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                return@Label
+                            }
+                            val arrow = if (comparison.changeAmount > 0f) "↑" else "↓"
+                            val color = if (comparison.changeAmount > 0f) increaseColor else decreaseColor
+                            val absPercent = kotlin.math.abs(comparison.changePercent * 100)
+                            val percentStr = if (comparison.changePercent.isNaN()) "--" else String.format("%.1f%%", absPercent)
+                            val amountStr = String.format("%+.2f", comparison.changeAmount)
+                            Text(text = "$arrow $percentStr  $amountStr", style = MaterialTheme.typography.bodySmall, color = color)
+                        }
+                        Label()
+                    }
+                }
             }
         }
     }
@@ -291,6 +335,8 @@ fun CategoryRankingList(ranking: List<CategoryRank>, modifier: Modifier = Modifi
 
             CategoryRankingList(
                 ranking = ranking,
+                comparisonMap = comparisonMap,
+                isIncome = isCategoryIncome,
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
 
