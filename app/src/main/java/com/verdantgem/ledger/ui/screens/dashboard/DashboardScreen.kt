@@ -66,6 +66,7 @@ fun DashboardScreen(
     val selectedIds by viewModel.selectedIds.collectAsState()
     val allCategories by viewModel.allCategories.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
+    val dailyAggregates by viewModel.dailyAggregates.collectAsState()
     val d = MaterialTheme.dimens
 
     var isSearchExpanded by remember { mutableStateOf(false) }
@@ -213,13 +214,36 @@ fun DashboardScreen(
                         if (item != null) {
                             when (item) {
                                 is DashboardItem.Header -> {
-                                    Text(
-                                        text = item.label,
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.outline,
-                                        modifier = Modifier.padding(vertical = d.spacingSm, horizontal = d.spacingXs)
-                                    )
+                                    val agg = dailyAggregates[item.label]
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = d.spacingSm, horizontal = d.spacingXs),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = item.label,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                        if (agg != null) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = "收入 ${String.format("%.0f", agg.totalIncome)}",
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    color = Color(0xFF43A047)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = "支出 ${String.format("%.0f", agg.totalExpense)}",
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    color = Color(0xFFE53935)
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                                 is DashboardItem.Record -> {
                                     RecordItem(

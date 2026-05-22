@@ -132,6 +132,65 @@ class StatisticsViewModel @Inject constructor(
         result
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val totalIncome: StateFlow<Double> = combine(
+        repository.allRecords, _mode, _selectedDate, repository.allCategories
+    ) { records, currentMode, date, categories ->
+        if (records.isEmpty()) return@combine 0.0
+
+        val incomeNames = categories.filter { it.isIncome }.map { it.name }.toSet()
+        val calendar = Calendar.getInstance()
+        val filtered = when (currentMode) {
+            StatsMode.RECENT -> {
+                val cal = Calendar.getInstance().apply {
+                    firstDayOfWeek = Calendar.MONDAY
+                    set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+                    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                }
+                records.filter { it.date >= cal.timeInMillis }
+            }
+            StatsMode.MONTH -> records.filter {
+                calendar.timeInMillis = it.date
+                calendar.get(Calendar.YEAR) == date.get(Calendar.YEAR) && calendar.get(Calendar.MONTH) == date.get(Calendar.MONTH)
+            }
+            StatsMode.YEAR -> records.filter {
+                calendar.timeInMillis = it.date
+                calendar.get(Calendar.YEAR) == date.get(Calendar.YEAR)
+            }
+        }
+        filtered.filter { it.categoryName in incomeNames }.sumOf { it.amount }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+    val totalExpense: StateFlow<Double> = combine(
+        repository.allRecords, _mode, _selectedDate, repository.allCategories
+    ) { records, currentMode, date, categories ->
+        if (records.isEmpty()) return@combine 0.0
+
+        val incomeNames = categories.filter { it.isIncome }.map { it.name }.toSet()
+        val calendar = Calendar.getInstance()
+        val filtered = when (currentMode) {
+            StatsMode.RECENT -> {
+                val cal = Calendar.getInstance().apply {
+                    firstDayOfWeek = Calendar.MONDAY
+                    set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+                    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                }
+                records.filter { it.date >= cal.timeInMillis }
+            }
+            StatsMode.MONTH -> records.filter {
+                calendar.timeInMillis = it.date
+                calendar.get(Calendar.YEAR) == date.get(Calendar.YEAR) && calendar.get(Calendar.MONTH) == date.get(Calendar.MONTH)
+            }
+            StatsMode.YEAR -> records.filter {
+                calendar.timeInMillis = it.date
+                calendar.get(Calendar.YEAR) == date.get(Calendar.YEAR)
+            }
+        }
+        filtered.filter { it.categoryName !in incomeNames }.sumOf { it.amount }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+    val totalSurplus: StateFlow<Double> = combine(totalIncome, totalExpense) { inc, exp -> inc - exp }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
     val categoryDistribution: StateFlow<Map<String, Float>> = combine(
         repository.allRecords, _mode, _selectedDate, _isCategoryIncome, repository.allCategories
     ) { records, currentMode, date, showIncome, categories ->
@@ -224,10 +283,21 @@ class StatisticsViewModel @Inject constructor(
     ) { detail, parent, showDetail -> if (showDetail) detail else parent }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
-    val activeRanking: StateFlow<List<CategoryRank>> = activeCategoryDistribution.map { map ->
+    val activeRanking: StateFlow<List<CategoryRank>> = combine(
+        activeCategoryDistribution, allCategories, _showDetail
+    ) { map, categories, showDetail ->
+        val parentMap = if (showDetail) {
+            categories.filter { it.parentName != null }.associate { it.name to it.parentName!! }
+        } else emptyMap()
         val total = map.values.sum()
         map.entries
-            .map { CategoryRank(it.key, it.value, if (total > 0f) it.value / total else 0f) }
+            .map {
+                val name = if (showDetail) {
+                    val parent = parentMap[it.key]
+                    if (parent != null) "$parent-${it.key}" else it.key
+                } else it.key
+                CategoryRank(name, it.value, if (total > 0f) it.value / total else 0f)
+            }
             .sortedByDescending { it.amount }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -255,17 +325,25 @@ class StatisticsViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Pair(emptyMap(), emptyMap()))
 
     val activeComparisonMap: StateFlow<Map<String, CategoryComparisonInfo>> = combine(
-        activeCategoryDistribution, prevPeriodDistribution, _showDetail
-    ) { currentDist, (prevSub, prevParent), showDetail ->
+        activeCategoryDistribution, prevPeriodDistribution, _showDetail, allCategories
+    ) { currentDist, (prevSub, prevParent), showDetail, categories ->
         if (currentDist.isEmpty()) return@combine emptyMap<String, CategoryComparisonInfo>()
 
         val prevDist = if (showDetail) prevSub else prevParent
+        val parentMap = if (showDetail) {
+            categories.filter { it.parentName != null }.associate { it.name to it.parentName!! }
+        } else emptyMap()
 
         currentDist.mapValues { (name, currentAmount) ->
             val prevAmount = prevDist[name] ?: 0f
             val changeAmount = currentAmount - prevAmount
             val changePercent = if (prevAmount > 0f) changeAmount / prevAmount else Float.NaN
             CategoryComparisonInfo(changeAmount, changePercent, prevAmount)
+        }.mapKeys { (name, _) ->
+            if (showDetail) {
+                val parent = parentMap[name]
+                if (parent != null) "$parent-$name" else name
+            } else name
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
@@ -279,6 +357,25 @@ class StatisticsViewModel @Inject constructor(
 
     fun setMode(newMode: StatsMode) {
         _mode.value = newMode
+    }
+
+    fun setDateFromMillis(millis: Long) {
+        val cal = Calendar.getInstance().apply { timeInMillis = millis }
+        val newDate = _selectedDate.value.clone() as Calendar
+        when (_mode.value) {
+            StatsMode.MONTH -> {
+                newDate.set(Calendar.YEAR, cal.get(Calendar.YEAR))
+                newDate.set(Calendar.MONTH, cal.get(Calendar.MONTH))
+                newDate.set(Calendar.DAY_OF_MONTH, 1)
+            }
+            StatsMode.YEAR -> {
+                newDate.set(Calendar.YEAR, cal.get(Calendar.YEAR))
+                newDate.set(Calendar.MONTH, 0)
+                newDate.set(Calendar.DAY_OF_MONTH, 1)
+            }
+            else -> {}
+        }
+        _selectedDate.value = newDate
     }
 
     fun adjustDate(amount: Int) {

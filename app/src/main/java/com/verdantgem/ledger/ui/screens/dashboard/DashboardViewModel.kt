@@ -40,6 +40,8 @@ private fun currentMonthEnd(): Long {
     }.timeInMillis
 }
 
+data class DailyAggregateItem(val totalIncome: Double, val totalExpense: Double)
+
 sealed class DashboardItem {
     data class Header(val label: String) : DashboardItem()
     data class Record(val record: com.verdantgem.ledger.data.model.Record) : DashboardItem()
@@ -120,6 +122,20 @@ class DashboardViewModel @Inject constructor(
 
     val allCategories: StateFlow<List<Category>> = repository.allCategories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val dailyAggregates: StateFlow<Map<String, DailyAggregateItem>> = combine(
+        repository.allRecords, repository.allCategories
+    ) { records, categories ->
+        val incomeNames = categories.filter { it.isIncome }.map { it.name }.toSet()
+        val sixMonthsAgo = Calendar.getInstance().apply { add(Calendar.MONTH, -6) }.timeInMillis
+        records.filter { it.date >= sixMonthsAgo }
+            .groupBy { getDateGroupLabel(it.date) }
+            .mapValues { (_, recs) ->
+                val income = recs.filter { it.categoryName in incomeNames }.sumOf { it.amount }
+                val expense = recs.filter { it.categoryName !in incomeNames }.sumOf { it.amount }
+                DailyAggregateItem(income, expense)
+            }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     val pagedItems: Flow<PagingData<DashboardItem>> = combine(_searchQuery, _refreshTrigger) { query, _ -> query }
         .flatMapLatest { query -> repository.getRecordsPaged(query) }

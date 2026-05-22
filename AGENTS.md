@@ -149,20 +149,24 @@
 ## 主界面时间轴
 - **分组标题**：`DashboardViewModel.getDateGroupLabel()` 保留 "今天""昨天" 为文字标签，其余显示具体日期
 - **日期格式**：本年显示 `MM-dd`（如 `03-15`），非本年显示 `yyyy-MM-dd`（如 `2025-12-01`）
+- **每日收支**：标题行右侧显示当日收支汇总 `"收入 xxx 支出 xxx"`，数据来源于 `DashboardViewModel.dailyAggregates`（基于近 6 个月记录按 `getDateGroupLabel` 分组汇总）
 
 ## 统计界面排名列表
 - **数据**：`StatisticsViewModel.activeRanking`（`StateFlow<List<CategoryRank>>`），从 `activeCategoryDistribution` 派生，按金额降序，含百分比
-- **UI 组件**：`CategoryRankingList`（`StatisticsScreen.kt`），位于饼图下方，每行含分类名 + LinearProgressIndicator + 百分比 + 金额
+- **UI 组件**：`CategoryRankingList`（`StatisticsScreen.kt`），位于柱状图下方，每行含分类名 + LinearProgressIndicator + 百分比 + 金额
 - **柱状图**：`SimpleBarChart` 点击柱子弹出悬浮框，显示时间标签 + 收支类型 + 金额；Y轴刻度显示整数
 - **饼图**：`CategoryPieChart` 用连线在饼图内直接显示标签名称和百分比，不再使用图例
 - **标题显示**："分类收入占比" → "收入占比"，"分类支出占比" → "支出占比"
 - **快捷切换**：占比/明细标题行右侧嵌入 `CompactToggle` 组件（切换支出/收入）+ `TextButton`（切换一级/二级分类）
 - **分类层级**：`showDetail` 控制一级（父类别汇总）或二级（子类别）显示，`activeCategoryDistribution` 自动切换，默认一级
 - **小数精度**：统计页面所有数值统一保留两位小数（柱状图Y轴/标签、饼图、排名列表百分比和金额）
+- **子类别前缀**：二级模式下子类别名显示为 `父类别-子类别` 格式（如 `食品餐饮-午餐`），`activeRanking` 和 `activeComparisonMap` 同步处理 name 映射
 
 ### 统计模式与日期导航
 - **StatsMode** 三种模式：日常（RECENT，本周逐日查看）、月（MONTH，当月逐日）、年（YEAR，当年逐月），通过 Tab 切换
-- **日期导航**：月模式下显示 `yyyy年MM月`，年模式下显示 `yyyy年`，左右箭头切换上一月/年
+- **日期导航**：月/年模式下点击日期文字弹出 `DatePickerDialog`，选中后自动更新；日常模式无日期选择
+- **收支切换**：移至日期行右侧，与明细区域一致使用 `CompactToggle` 小开关
+- **汇总卡片**：TabRow 下方显示「收入｜支出｜结余」三列汇总，数据源为 `StatisticsViewModel.totalIncome/totalExpense/totalSurplus`
 - **生命周期**：离开统计页面时（ON_PAUSE）自动重置为默认模式（日常/支出/一级分类）
 
 ### 环比对比功能

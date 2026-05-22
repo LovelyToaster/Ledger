@@ -33,13 +33,148 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.verdantgem.ledger.ui.theme.dimens
 import java.text.SimpleDateFormat
 import java.util.*
+
+@Composable
+fun MonthPickerDialog(
+    currentYear: Int,
+    currentMonth: Int,
+    onConfirm: (year: Int, month: Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedYear by remember { mutableStateOf(currentYear) }
+    var selectedMonth by remember { mutableStateOf(currentMonth) }
+    val months = listOf("1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月")
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("选择月份", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { selectedYear-- }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一年")
+                    }
+                    Text(
+                        text = "${selectedYear}年",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.width(80.dp),
+                        textAlign = TextAlign.Center
+                    )
+                    IconButton(onClick = { selectedYear++ }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一年")
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                val monthRows = months.chunked(3)
+                monthRows.forEach { row ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        row.forEach { month ->
+                            val index = months.indexOf(month)
+                            Surface(
+                                onClick = { selectedMonth = index },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (index == selectedMonth) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(width = 72.dp, height = 40.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = month,
+                                        fontWeight = if (index == selectedMonth) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (index == selectedMonth) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) { Text("取消") }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(onClick = { onConfirm(selectedYear, selectedMonth) }) { Text("确定") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun YearPickerDialog(
+    currentYear: Int,
+    onConfirm: (year: Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedYear by remember { mutableStateOf(currentYear) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("选择年份", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { selectedYear-- }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一年")
+                    }
+                    Text(
+                        text = "${selectedYear}年",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.width(120.dp),
+                        textAlign = TextAlign.Center
+                    )
+                    IconButton(onClick = { selectedYear++ }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一年")
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) { Text("取消") }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(onClick = { onConfirm(selectedYear) }) { Text("确定") }
+                }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +190,9 @@ fun StatisticsScreen(
     val ranking by viewModel.activeRanking.collectAsState()
     val showDetail by viewModel.showDetail.collectAsState()
     val comparisonMap by viewModel.activeComparisonMap.collectAsState()
+    val totalIncome by viewModel.totalIncome.collectAsState()
+    val totalExpense by viewModel.totalExpense.collectAsState()
+    val totalSurplus by viewModel.totalSurplus.collectAsState()
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -107,57 +245,162 @@ fun StatisticsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
+            Spacer(modifier = Modifier.height(d.spacingMd))
+
+            // 汇总卡片：收入 | 支出 | 结余
+            Surface(
                 modifier = Modifier
-                    .height(36.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             ) {
-                Box(
+                Row(
                     modifier = Modifier
-                        .width(72.dp).fillMaxHeight()
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(if (!isCategoryIncome) MaterialTheme.colorScheme.primary else Color.Transparent)
-                        .clickable { if (isCategoryIncome) viewModel.toggleCategoryType() },
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .padding(vertical = 14.dp)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("支出", fontSize = 13.sp, color = if (!isCategoryIncome) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Box(
-                    modifier = Modifier
-                        .width(72.dp).fillMaxHeight()
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(if (isCategoryIncome) MaterialTheme.colorScheme.primary else Color.Transparent)
-                        .clickable { if (!isCategoryIncome) viewModel.toggleCategoryType() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("收入", fontSize = 13.sp, color = if (isCategoryIncome) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("收入", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+                        Text(
+                            text = "¥${String.format("%.2f", totalIncome)}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF43A047)
+                        )
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("支出", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+                        Text(
+                            text = "¥${String.format("%.2f", totalExpense)}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFE53935)
+                        )
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("结余", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+                        Text(
+                            text = "¥${String.format("%.2f", totalSurplus)}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (totalSurplus >= 0) Color(0xFF43A047) else Color(0xFFE53935)
+                        )
+                    }
                 }
             }
 
-            if (mode != StatsMode.RECENT) {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { viewModel.adjustDate(-1) }) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一个")
-                        }
+            Spacer(modifier = Modifier.height(d.spacingMd))
+
+            // 日期选择（左）+ 收支切换（右）
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(36.dp)
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (mode != StatsMode.RECENT) {
+                    var showDatePicker: Boolean by remember { mutableStateOf(false) }
+                    val dateFormat = if (mode == StatsMode.MONTH)
+                        SimpleDateFormat("yyyy年MM月", Locale.getDefault())
+                    else
+                        SimpleDateFormat("yyyy年", Locale.getDefault())
+
+                    Row(
+                        modifier = Modifier.clickable { showDatePicker = true },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = if (mode == StatsMode.MONTH) {
-                                SimpleDateFormat("yyyy年MM月", Locale.getDefault()).format(selectedDate.time)
-                            } else {
-                                SimpleDateFormat("yyyy年", Locale.getDefault()).format(selectedDate.time)
-                            },
-                            style = MaterialTheme.typography.titleMedium,
+                            text = dateFormat.format(selectedDate.time),
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
                         )
-                        IconButton(onClick = { viewModel.adjustDate(1) }) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一个")
+                        Icon(
+                            Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    if (showDatePicker) {
+                        if (mode == StatsMode.MONTH) {
+                            MonthPickerDialog(
+                                currentYear = selectedDate.get(Calendar.YEAR),
+                                currentMonth = selectedDate.get(Calendar.MONTH),
+                                onConfirm = { year, month ->
+                                    viewModel.setDateFromMillis(
+                                        Calendar.getInstance().apply {
+                                            set(year, month, 1, 0, 0, 0)
+                                            set(Calendar.MILLISECOND, 0)
+                                        }.timeInMillis
+                                    )
+                                    showDatePicker = false
+                                },
+                                onDismiss = { showDatePicker = false }
+                            )
+                        } else {
+                            YearPickerDialog(
+                                currentYear = selectedDate.get(Calendar.YEAR),
+                                onConfirm = { year ->
+                                    viewModel.setDateFromMillis(
+                                        Calendar.getInstance().apply {
+                                            set(year, 0, 1, 0, 0, 0)
+                                            set(Calendar.MILLISECOND, 0)
+                                        }.timeInMillis
+                                    )
+                                    showDatePicker = false
+                                },
+                                onDismiss = { showDatePicker = false }
+                            )
                         }
+                    }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+
+                Row(
+                    modifier = Modifier
+                        .height(28.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .padding(2.dp)
+                            .defaultMinSize(minWidth = 48.dp)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (!isCategoryIncome) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable { if (isCategoryIncome) viewModel.toggleCategoryType() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("支出", fontSize = 11.sp, color = if (!isCategoryIncome) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .padding(2.dp)
+                            .defaultMinSize(minWidth = 48.dp)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isCategoryIncome) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable { if (!isCategoryIncome) viewModel.toggleCategoryType() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("收入", fontSize = 11.sp, color = if (isCategoryIncome) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -287,7 +530,7 @@ fun CategoryRankingList(
     }
 }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(d.spacingMd))
 
             val chartDataNonNull = if (data.isNotEmpty() && data.any { it > 0f }) data else data.ifEmpty { listOf(0f) }
             val chartLabelsNonNull = if (data.isNotEmpty() && data.any { it > 0f }) labels else labels.ifEmpty { listOf("") }
@@ -298,7 +541,7 @@ fun CategoryRankingList(
                 mode = mode
             )
 
-            Spacer(modifier = Modifier.height(d.spacingLg))
+            Spacer(modifier = Modifier.height(d.spacingMd))
 
 
 
