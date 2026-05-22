@@ -8,6 +8,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.delay
@@ -44,6 +47,11 @@ class SyncManager @Inject constructor(
     private var debounceJob: Job? = null
     private val dirty = AtomicBoolean(false)
 
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
+    private var backgroundedAt = 0L
+
     fun markDirty() { dirty.set(true) }
 
     fun startObserving(scope: CoroutineScope) {
@@ -63,6 +71,7 @@ class SyncManager @Inject constructor(
     }
 
     suspend fun onAppBackgrounded() {
+        backgroundedAt = System.currentTimeMillis()
         val cfg = readConfig()
         if (cfg != null) {
             if (dirty.get()) {
@@ -77,6 +86,22 @@ class SyncManager @Inject constructor(
                 backupDatabase(cfg.url, cfg.user, cfg.pass)
             }
         }
+    }
+
+    suspend fun onAppForegrounded() {
+        if (backgroundedAt == 0L) return
+        val elapsed = System.currentTimeMillis() - backgroundedAt
+        backgroundedAt = 0L
+        if (elapsed < 30_000L) return
+        val cfg = readConfig() ?: return
+        if (!cfg.autoSync) return
+        fullSync(cfg.url, cfg.user, cfg.pass, cfg.cryptoPw)
+    }
+
+    suspend fun syncIfConfigured(ignoreAutoSync: Boolean = false): SyncResult? {
+        val cfg = readConfig() ?: return null
+        if (!ignoreAutoSync && !cfg.autoSync) return null
+        return fullSync(cfg.url, cfg.user, cfg.pass, cfg.cryptoPw)
     }
 
     suspend fun backupDatabase(
@@ -167,26 +192,33 @@ class SyncManager @Inject constructor(
         pass: String,
         cryptoPassword: String?,
         dispatcher: CoroutineContext = Dispatchers.IO
-    ): SyncResult = mutex.withLock {
-        val syncUsername = prefs.getString("sync_username", "") ?: ""
-        if (syncUsername.isBlank()) {
-            return@withLock SyncResult.Error("Sync username not configured")
-        }
-        withContext(dispatcher) {
-            try {
-                ensureDir(url, user, pass, syncUsername)
-                val pullResult = pullAndMerge(url, user, pass, cryptoPassword, syncUsername, dispatcher)
-                if (pullResult is SyncResult.Error && pullResult.message != "Remote file not found") {
-                    return@withContext pullResult
+    ): SyncResult {
+        _isSyncing.value = true
+        return try {
+            mutex.withLock {
+                val syncUsername = prefs.getString("sync_username", "") ?: ""
+                if (syncUsername.isBlank()) {
+                    return@withLock SyncResult.Error("Sync username not configured")
                 }
-                val pushResult = push(url, user, pass, cryptoPassword, syncUsername, dispatcher)
-                if (pushResult is SyncResult.Success) {
-                    dirty.set(false)
+                withContext(dispatcher) {
+                    try {
+                        ensureDir(url, user, pass, syncUsername)
+                        val pullResult = pullAndMerge(url, user, pass, cryptoPassword, syncUsername, dispatcher)
+                        if (pullResult is SyncResult.Error && pullResult.message != "Remote file not found") {
+                            return@withContext pullResult
+                        }
+                        val pushResult = push(url, user, pass, cryptoPassword, syncUsername, dispatcher)
+                        if (pushResult is SyncResult.Success) {
+                            dirty.set(false)
+                        }
+                        pushResult
+                    } catch (e: Exception) {
+                        SyncResult.Error(e.message ?: "Unknown sync error")
+                    }
                 }
-                pushResult
-            } catch (e: Exception) {
-                SyncResult.Error(e.message ?: "Unknown sync error")
             }
+        } finally {
+            _isSyncing.value = false
         }
     }
 

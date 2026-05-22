@@ -89,9 +89,11 @@
 ### 触发机制
 - **启动时**：`LedgerApplication.onCreate()` → 如果 `autoSyncEnabled`，执行一次 `fullSync()`
 - **数据变更时**（运行中）：`DataChangeNotifier`（SharedFlow）→ `SyncManager` 30 秒 debounce → `fullSync()`
+- **回前台时**（App 从后台切回）：`ProcessLifecycleOwner.onStart()` → `SyncManager.onAppForegrounded()` → 如果后台停留超过 30 秒，自动拉取同步
 - **退出时**（App 进入后台）：`ProcessLifecycleOwner.onStop()` → 如果 dirty 标记为 true → 同步 + 备份
 - **脏标记优化**：`AtomicBoolean dirty`，同步成功后置 false，退出时仅 dirty=true 才同步，避免重复
-- **手动触发**：设置页「立即同步」按钮
+- **手动触发**：设置页「立即同步」按钮 / 总览页同步按钮（搜索按钮旁，同步中显示转圈动画）
+- **同步状态**：`SyncManager.isSyncing`（`StateFlow<Boolean>`）暴露给 UI，Dashboard 和设置页均可观察
 
 ### 自动备份
 - `SyncManager.backupDatabase()` — 上传 SQLite `.db` 文件到 `简记账/ledger_backup_*.db`
@@ -104,10 +106,11 @@
 | `data/remote/WebDavClient.kt` | 封装 OKHttp WebDAV 操作（PUT/GET/PROPFIND/DELETE/MKCOL）；`testConnection()` 先 MKCOL 创建 `简记账/` 目录再 PROPFIND |
 | `data/remote/CryptoManager.kt` | AES-256-GCM 加解密 |
 | `data/remote/SyncSnapshot.kt` | 同步快照数据结构 + Entity ↔ Sync 转换函数 |
-| `data/remote/SyncManager.kt` | 核心同步编排：pull → merge → push + backup；`ensureDir()` 确保远程目录存在后操作 |
+| `data/remote/SyncManager.kt` | 核心同步编排：pull → merge → push + backup；`ensureDir()` 确保远程目录存在后操作；`isSyncing` StateFlow 暴露全局同步状态 |
 | `data/DataChangeNotifier.kt` | 数据变更事件通知器 |
 | `ui/screens/settings/SettingsViewModel.kt` | 同步状态管理（加密密码、自动备份开关、手动触发）；`saveConfig()` 仅在配置变化时重置测试状态 |
 | `ui/screens/settings/WebDavConfigScreen.kt` | 配置 UI（加密密码弹窗、同步状态展示） |
+| `ui/screens/dashboard/DashboardViewModel.kt` | 注入 SyncManager，暴露 `isSyncing` 和 `triggerSync()` 供总览页同步按钮使用 |
 
 ### 界面结构
 - `SettingsScreen` → "数据同步设置" → `WebDavConfigScreen`

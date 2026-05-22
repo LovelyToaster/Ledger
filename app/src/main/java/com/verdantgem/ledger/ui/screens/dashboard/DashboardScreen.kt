@@ -65,6 +65,7 @@ fun DashboardScreen(
     val isSelectionMode by viewModel.isSelectionMode.collectAsState()
     val selectedIds by viewModel.selectedIds.collectAsState()
     val allCategories by viewModel.allCategories.collectAsState()
+    val isSyncing by viewModel.isSyncing.collectAsState()
     val d = MaterialTheme.dimens
 
     var isSearchExpanded by remember { mutableStateOf(false) }
@@ -150,6 +151,17 @@ fun DashboardScreen(
                     TopAppBar(
                         title = { Text("我的账本", fontWeight = FontWeight.Bold) },
                         actions = {
+                            IconButton(onClick = { viewModel.triggerSync() }) {
+                                if (isSyncing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                } else {
+                                    Icon(Icons.Default.Refresh, contentDescription = "同步")
+                                }
+                            }
                             IconButton(onClick = { isSearchExpanded = true }) {
                                 Icon(Icons.Default.Search, contentDescription = "搜索")
                             }

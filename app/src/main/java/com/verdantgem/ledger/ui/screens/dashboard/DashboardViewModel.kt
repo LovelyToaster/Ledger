@@ -11,6 +11,7 @@ import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
 import com.verdantgem.ledger.data.remote.LocationDelegate
 import com.verdantgem.ledger.data.remote.LocationProvider
+import com.verdantgem.ledger.data.remote.SyncManager
 import com.verdantgem.ledger.data.repository.LedgerRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -74,10 +75,19 @@ private fun getDateGroupLabel(dateMillis: Long): String {
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val repository: LedgerRepository,
+    private val syncManager: SyncManager,
     locationProvider: LocationProvider
 ) : ViewModel() {
 
     private val locationDelegate = LocationDelegate(locationProvider)
+
+    val isSyncing: StateFlow<Boolean> = syncManager.isSyncing
+
+    fun triggerSync() {
+        viewModelScope.launch {
+            syncManager.syncIfConfigured(ignoreAutoSync = true)
+        }
+    }
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery

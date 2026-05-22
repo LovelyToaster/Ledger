@@ -28,6 +28,11 @@ class LedgerApplication : Application() {
         syncManager.startObserving(appScope)
 
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) {
+                appScope.launch {
+                    syncManager.onAppForegrounded()
+                }
+            }
             override fun onStop(owner: LifecycleOwner) {
                 appScope.launch {
                     syncManager.onAppBackgrounded()
