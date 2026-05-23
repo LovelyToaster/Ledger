@@ -22,4 +22,7 @@ interface BudgetDao {
 
     @Query("SELECT * FROM budgets WHERE id = 1")
     suspend fun getBudgetForSync(): Budget?
+
+    @Query("SELECT * FROM budgets WHERE syncUuid = :syncUuid LIMIT 1")
+    suspend fun getBudgetBySyncUuid(syncUuid: String): Budget?
 }

@@ -60,7 +60,7 @@ class SyncManager @Inject constructor(
                 dirty.set(true)
                 debounceJob?.cancel()
                 debounceJob = scope.launch {
-                    delay(30_000L)
+                    delay(5_000L)
                     val cfg = readConfig() ?: return@launch
                     if (fullSync(cfg.url, cfg.user, cfg.pass, cfg.cryptoPw) is SyncResult.Success) {
                         dirty.set(false)
@@ -261,30 +261,74 @@ class SyncManager @Inject constructor(
     }
 
     private suspend fun mergeSnapshot(snapshot: SyncSnapshot) {
-        val localRecords = repository.getAllRecordsForSync().associateBy { it.id }
-        val localCategories = repository.getAllCategoriesForSync().associateBy { it.id }
+        val allRecords = repository.getAllRecordsForSync()
+        val localRecordsByUuid = allRecords.associateBy { it.syncUuid }
+        val localRecordsById = allRecords.associateBy { it.id }
+        val allCategories = repository.getAllCategoriesForSync()
+        val localCategoriesByUuid = allCategories.associateBy { it.syncUuid }
+        val localCategoriesById = allCategories.associateBy { it.id }
         val localBudget = repository.getBudgetForSync()
 
         for (remote in snapshot.records) {
-            val local = localRecords[remote.id]
+            // 优先 UUID 匹配；失败则回落 id 匹配（兼容旧格式 / 迁移后 UUID 不一致）
+            var local: com.verdantgem.ledger.data.model.Record? = null
+            if (remote.syncUuid.isNotBlank()) {
+                local = localRecordsByUuid[remote.syncUuid]
+            }
+            if (local == null) {
+                local = localRecordsById[remote.id]
+            }
+
             if (local == null || remote.updatedAt > local.updatedAt) {
-                repository.insertRecordForSync(remote.toRecord().copy(updatedAt = remote.updatedAt))
+                val record = remote.toRecord().copy(updatedAt = remote.updatedAt)
+                // UUID 收敛策略：远程有 UUID → 采纳；否则保留本地 UUID
+                val syncUuid = when {
+                    record.syncUuid.isNotBlank()        -> record.syncUuid
+                    local != null && local.syncUuid.isNotBlank() -> local.syncUuid
+                    else                                -> record.syncUuid
+                }
+                repository.insertRecordForSync(record.copy(syncUuid = syncUuid))
             } else if (local.deleted && !remote.deleted && remote.updatedAt > local.updatedAt) {
-                repository.insertRecordForSync(remote.toRecord().copy(updatedAt = remote.updatedAt))
+                val record = remote.toRecord().copy(updatedAt = remote.updatedAt)
+                val syncUuid = when {
+                    record.syncUuid.isNotBlank()        -> record.syncUuid
+                    local.syncUuid.isNotBlank()         -> local.syncUuid
+                    else                                -> record.syncUuid
+                }
+                repository.insertRecordForSync(record.copy(syncUuid = syncUuid))
             }
         }
 
         for (remote in snapshot.categories) {
-            val local = localCategories[remote.id]
+            var local: com.verdantgem.ledger.data.model.Category? = null
+            if (remote.syncUuid.isNotBlank()) {
+                local = localCategoriesByUuid[remote.syncUuid]
+            }
+            if (local == null) {
+                local = localCategoriesById[remote.id]
+            }
+
             if (local == null || remote.updatedAt > local.updatedAt) {
-                repository.upsertCategoryForSync(remote.toCategory().copy(updatedAt = remote.updatedAt))
+                val cat = remote.toCategory().copy(updatedAt = remote.updatedAt)
+                val syncUuid = when {
+                    cat.syncUuid.isNotBlank()            -> cat.syncUuid
+                    local != null && local.syncUuid.isNotBlank() -> local.syncUuid
+                    else                                 -> cat.syncUuid
+                }
+                repository.upsertCategoryForSync(cat.copy(syncUuid = syncUuid))
             }
         }
 
         val remoteBudget = snapshot.budgets.firstOrNull()
         if (remoteBudget != null) {
             if (localBudget == null || remoteBudget.updatedAt > localBudget.updatedAt) {
-                repository.upsertBudgetForSync(remoteBudget.toBudget().copy(updatedAt = remoteBudget.updatedAt))
+                val b = remoteBudget.toBudget().copy(updatedAt = remoteBudget.updatedAt)
+                val syncUuid = when {
+                    b.syncUuid.isNotBlank()              -> b.syncUuid
+                    localBudget != null && localBudget.syncUuid.isNotBlank() -> localBudget.syncUuid
+                    else                                 -> b.syncUuid
+                }
+                repository.upsertBudgetForSync(b.copy(syncUuid = syncUuid))
             }
         }
 

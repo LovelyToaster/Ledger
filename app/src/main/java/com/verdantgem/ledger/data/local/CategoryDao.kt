@@ -44,4 +44,7 @@ interface CategoryDao {
 
     @Query("SELECT * FROM categories ORDER BY updatedAt ASC")
     suspend fun getAllCategoriesForSync(): List<Category>
+
+    @Query("SELECT * FROM categories WHERE syncUuid = :syncUuid LIMIT 1")
+    suspend fun getCategoryBySyncUuid(syncUuid: String): Category?
 }

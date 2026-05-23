@@ -3,10 +3,12 @@ package com.verdantgem.ledger.data.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import java.util.Date
+import java.util.UUID
 
 /**
  * 账目记录实体
- * @param id 唯一标识
+ * @param id 唯一标识（本地自增主键）
+ * @param syncUuid 同步用全局唯一标识
  * @param amount 金额（正数为支出或收入，由 category 决定）
  * @param categoryId 关联分类 ID
  * @param note 备注或事由
@@ -19,6 +21,7 @@ import java.util.Date
 @Entity(tableName = "records")
 data class Record(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val syncUuid: String = UUID.randomUUID().toString(),
     val amount: Double,
     val categoryId: Long,
     val categoryName: String,

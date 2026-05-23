@@ -8,7 +8,7 @@ import com.verdantgem.ledger.data.model.Budget
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
 
-@Database(entities = [Category::class, Record::class, Budget::class], version = 6, exportSchema = false)
+@Database(entities = [Category::class, Record::class, Budget::class], version = 7, exportSchema = false)
 abstract class LedgerDatabase : RoomDatabase() {
     abstract fun recordDao(): RecordDao
     abstract fun categoryDao(): CategoryDao
@@ -39,6 +39,13 @@ abstract class LedgerDatabase : RoomDatabase() {
 
         val MIGRATION_5_6 = Migration(5, 6) { db ->
             db.execSQL("ALTER TABLE records ADD COLUMN excludeFromBudget INTEGER NOT NULL DEFAULT 0")
+        }
+
+        val MIGRATION_6_7 = Migration(6, 7) { db ->
+            db.execSQL("ALTER TABLE records ADD COLUMN syncUuid TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE categories ADD COLUMN syncUuid TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE budgets ADD COLUMN syncUuid TEXT NOT NULL DEFAULT ''")
+            // 不在此处生成 UUID：由首次同步推送的设备统一生成，确保跨设备 UUID 一致
         }
     }
 }

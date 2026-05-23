@@ -61,6 +61,9 @@ interface RecordDao {
     @Query("SELECT * FROM records ORDER BY updatedAt ASC")
     suspend fun getAllRecordsForSync(): List<Record>
 
+    @Query("SELECT * FROM records WHERE syncUuid = :syncUuid LIMIT 1")
+    suspend fun getRecordBySyncUuid(syncUuid: String): Record?
+
     @Query("UPDATE records SET updatedAt = :now WHERE id = :id")
     suspend fun touchUpdatedAt(id: Long, now: Long = System.currentTimeMillis())
 

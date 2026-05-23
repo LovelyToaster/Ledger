@@ -25,6 +25,7 @@ data class SyncSnapshot(
 @Serializable
 data class SyncRecord(
     @SerialName("id") val id: Long,
+    @SerialName("suuid") val syncUuid: String = "",
     @SerialName("amount") val amount: Double,
     @SerialName("categoryId") val categoryId: Long,
     @SerialName("categoryName") val categoryName: String,
@@ -42,6 +43,7 @@ data class SyncRecord(
 @Serializable
 data class SyncCategory(
     @SerialName("id") val id: Long,
+    @SerialName("suuid") val syncUuid: String = "",
     @SerialName("name") val name: String,
     @SerialName("parentName") val parentName: String? = null,
     @SerialName("icon") val icon: String = "default_icon",
@@ -54,13 +56,14 @@ data class SyncCategory(
 @Serializable
 data class SyncBudget(
     @SerialName("id") val id: Int = 1,
+    @SerialName("suuid") val syncUuid: String = "",
     @SerialName("monthlyAmount") val monthlyAmount: Double,
     @SerialName("updatedAt") val updatedAt: Long,
     @SerialName("deleted") val deleted: Boolean = false
 )
 
 fun SyncRecord.toRecord() = com.verdantgem.ledger.data.model.Record(
-    id = id, amount = amount, categoryId = categoryId,
+    id = id, syncUuid = syncUuid, amount = amount, categoryId = categoryId,
     categoryName = categoryName, note = note, date = date,
     createdAt = createdAt, updatedAt = updatedAt, deleted = deleted,
     excludeFromBudget = excludeFromBudget,
@@ -68,7 +71,7 @@ fun SyncRecord.toRecord() = com.verdantgem.ledger.data.model.Record(
 )
 
 fun com.verdantgem.ledger.data.model.Record.toSync() = SyncRecord(
-    id = id, amount = amount, categoryId = categoryId,
+    id = id, syncUuid = syncUuid, amount = amount, categoryId = categoryId,
     categoryName = categoryName, note = note, date = date,
     createdAt = createdAt, updatedAt = updatedAt, deleted = deleted,
     excludeFromBudget = excludeFromBudget,
@@ -76,19 +79,19 @@ fun com.verdantgem.ledger.data.model.Record.toSync() = SyncRecord(
 )
 
 fun SyncCategory.toCategory() = com.verdantgem.ledger.data.model.Category(
-    id = id, name = name, parentName = parentName, icon = icon,
+    id = id, syncUuid = syncUuid, name = name, parentName = parentName, icon = icon,
     isIncome = isIncome, prompts = prompts, updatedAt = updatedAt, deleted = deleted
 )
 
 fun com.verdantgem.ledger.data.model.Category.toSync() = SyncCategory(
-    id = id, name = name, parentName = parentName, icon = icon,
+    id = id, syncUuid = syncUuid, name = name, parentName = parentName, icon = icon,
     isIncome = isIncome, prompts = prompts, updatedAt = updatedAt, deleted = deleted
 )
 
 fun SyncBudget.toBudget() = com.verdantgem.ledger.data.model.Budget(
-    id = id, monthlyAmount = monthlyAmount, updatedAt = updatedAt, deleted = deleted
+    id = id, syncUuid = syncUuid, monthlyAmount = monthlyAmount, updatedAt = updatedAt, deleted = deleted
 )
 
 fun com.verdantgem.ledger.data.model.Budget.toSync() = SyncBudget(
-    id = id, monthlyAmount = monthlyAmount, updatedAt = updatedAt, deleted = deleted
+    id = id, syncUuid = syncUuid, monthlyAmount = monthlyAmount, updatedAt = updatedAt, deleted = deleted
 )

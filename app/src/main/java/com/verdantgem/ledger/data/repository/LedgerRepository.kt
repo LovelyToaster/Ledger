@@ -170,9 +170,37 @@ class LedgerRepository @Inject constructor(
     suspend fun getBudgetForSync(): Budget? = budgetDao.getBudgetForSync()
     suspend fun getDeletedRecords(): List<Record> = recordDao.getDeletedRecords()
 
-    suspend fun insertRecordForSync(record: Record) = recordDao.insertRecord(record)
-    suspend fun upsertCategoryForSync(category: Category) = categoryDao.upsertCategory(category)
-    suspend fun upsertBudgetForSync(budget: Budget) = budgetDao.upsertBudget(budget)
+    suspend fun insertRecordForSync(record: Record) {
+        val effectiveSyncUuid = record.syncUuid.ifBlank { java.util.UUID.randomUUID().toString() }
+        val existing = recordDao.getRecordBySyncUuid(effectiveSyncUuid)
+        if (existing != null) {
+            // 本地已有相同 syncUuid 的记录，用远程数据覆盖但保留本地 id
+            recordDao.insertRecord(record.copy(id = existing.id, syncUuid = effectiveSyncUuid))
+        } else {
+            // 新记录，让 Room 自增 id
+            recordDao.insertRecord(record.copy(id = 0, syncUuid = effectiveSyncUuid))
+        }
+    }
+
+    suspend fun upsertCategoryForSync(category: Category) {
+        val effectiveSyncUuid = category.syncUuid.ifBlank { java.util.UUID.randomUUID().toString() }
+        val existing = categoryDao.getCategoryBySyncUuid(effectiveSyncUuid)
+        if (existing != null) {
+            categoryDao.upsertCategory(category.copy(id = existing.id, syncUuid = effectiveSyncUuid))
+        } else {
+            categoryDao.upsertCategory(category.copy(id = 0, syncUuid = effectiveSyncUuid))
+        }
+    }
+
+    suspend fun upsertBudgetForSync(budget: Budget) {
+        val effectiveSyncUuid = budget.syncUuid.ifBlank { java.util.UUID.randomUUID().toString() }
+        val existing = budgetDao.getBudgetBySyncUuid(effectiveSyncUuid)
+        if (existing != null) {
+            budgetDao.upsertBudget(budget.copy(id = existing.id, syncUuid = effectiveSyncUuid))
+        } else {
+            budgetDao.upsertBudget(budget.copy(id = 1, syncUuid = effectiveSyncUuid))
+        }
+    }
 
     suspend fun purgeDeletedRecords() {
         recordDao.purgeDeletedRecords()
