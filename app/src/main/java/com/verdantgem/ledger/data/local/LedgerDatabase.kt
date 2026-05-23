@@ -8,7 +8,7 @@ import com.verdantgem.ledger.data.model.Budget
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
 
-@Database(entities = [Category::class, Record::class, Budget::class], version = 5, exportSchema = false)
+@Database(entities = [Category::class, Record::class, Budget::class], version = 6, exportSchema = false)
 abstract class LedgerDatabase : RoomDatabase() {
     abstract fun recordDao(): RecordDao
     abstract fun categoryDao(): CategoryDao
@@ -35,6 +35,10 @@ abstract class LedgerDatabase : RoomDatabase() {
             db.execSQL("ALTER TABLE budgets ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")
             db.execSQL("UPDATE records SET updatedAt = createdAt")
             db.execSQL("UPDATE categories SET updatedAt = (SELECT COALESCE(MAX(createdAt), 0) FROM records)")
+        }
+
+        val MIGRATION_5_6 = Migration(5, 6) { db ->
+            db.execSQL("ALTER TABLE records ADD COLUMN excludeFromBudget INTEGER NOT NULL DEFAULT 0")
         }
     }
 }

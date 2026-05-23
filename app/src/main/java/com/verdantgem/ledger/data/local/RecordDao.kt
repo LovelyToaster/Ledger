@@ -49,10 +49,10 @@ interface RecordDao {
     @Query("SELECT COUNT(*) FROM records WHERE deleted = 0")
     fun getRecordCountFlow(): Flow<Int>
 
-    @Query("SELECT COALESCE(SUM(amount), 0) FROM records WHERE deleted = 0 AND date >= :start AND date <= :end AND categoryName NOT IN (SELECT name FROM categories WHERE isIncome = 1)")
+    @Query("SELECT COALESCE(SUM(amount), 0) FROM records WHERE deleted = 0 AND excludeFromBudget = 0 AND date >= :start AND date <= :end AND categoryName NOT IN (SELECT name FROM categories WHERE isIncome = 1)")
     fun getMonthlyExpenseFlow(start: Long, end: Long): Flow<Double>
 
-    @Query("SELECT COALESCE(SUM(amount), 0) FROM records WHERE deleted = 0 AND date >= :start AND date <= :end AND categoryName IN (SELECT name FROM categories WHERE isIncome = 1)")
+    @Query("SELECT COALESCE(SUM(amount), 0) FROM records WHERE deleted = 0 AND excludeFromBudget = 0 AND date >= :start AND date <= :end AND categoryName IN (SELECT name FROM categories WHERE isIncome = 1)")
     fun getMonthlyIncomeFlow(start: Long, end: Long): Flow<Double>
 
     @Query("SELECT SUM(amount) FROM records WHERE deleted = 0 AND date >= :start AND date <= :end")
@@ -66,4 +66,13 @@ interface RecordDao {
 
     @Query("UPDATE records SET date = :billDate, updatedAt = :now WHERE id = :id")
     suspend fun updateBillDate(id: Long, billDate: Long, now: Long = System.currentTimeMillis())
+
+    @Query("UPDATE records SET note = :note, updatedAt = :now WHERE id = :id")
+    suspend fun updateRecordNote(id: Long, note: String, now: Long = System.currentTimeMillis())
+
+    @Query("UPDATE records SET categoryId = :categoryId, categoryName = :categoryName, updatedAt = :now WHERE id = :id")
+    suspend fun updateRecordCategory(id: Long, categoryId: Long, categoryName: String, now: Long = System.currentTimeMillis())
+
+    @Query("UPDATE records SET excludeFromBudget = :exclude, updatedAt = :now WHERE id = :id")
+    suspend fun updateRecordExcludeFromBudget(id: Long, exclude: Boolean, now: Long = System.currentTimeMillis())
 }

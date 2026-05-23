@@ -17,8 +17,8 @@
 - **定位服务**：`LocationProvider`（Hilt `@Singleton`），`getAddress()` 每次调用创建/销毁 `AMapLocationClient`，`finally` 中确保 `onDestroy()` 释放系统连接
 - **生命周期**：进入记账界面 → `startLocation()` → 定位完成自动 `onDestroy()`；退出界面 → `DisposableEffect.onDispose` / `onCleared` → `stopLocation()` 取消 job；保存前 `locationJob?.join()` 等待定位完成
 - **防重复**：`startLocation()` 有双重 guard — 已有有效地址不重复获取，已有正在执行的 job 不重复启动
-- **数据库版本**：v5（`MIGRATION_4_5` 新增 `updatedAt`、`deleted` 字段）
-- **RecordDetailScreen**：仍然显示已保存的 `Record.address` 字段（若有）
+- **数据库版本**：v6（`MIGRATION_4_5` 新增 `updatedAt`、`deleted` 字段；`MIGRATION_5_6` 新增 `excludeFromBudget` 字段）
+- **RecordDetailScreen**：仍然显示已保存的 `Record.address` 字段（若有）；支持编辑备注/类别/不计入预算开关
 
 ## 预算功能
 - **数据模型**：`Budget` Entity（单例，id=1），`monthlyAmount` 存月预算金额
@@ -130,7 +130,7 @@
 - **R8 保留规则**：`proguard-rules.pro` 中 `pickFirst "/META-INF/services/**"` 确保 POI ServiceLoader 正常工作
 
 ## 快速记账类别选择
-- **类别选择**：`QuickRecordOverlay` 内部使用 `QuickCategoryPicker`（内联于 Surface 中），不再使用 AlertDialog；显示父类别为标签头、子类别为平铺网格（4列）
+- **类别选择**：`QuickRecordOverlay` 内部使用 `QuickCategoryPicker`（位于 `ui/components/QuickCategoryPicker.kt`，在 DashboardScreen 和 RecordDetailScreen 间复用），显示父类别为标签头、子类别为平铺网格（4列）
 - **手动类别优先**：类别 Chip 显示优先使用 `selectedCategory`（手动选择），回退到 `matchedCategory`（文本解析）
 - **匹配算法**：精确匹配名称 → 精确匹配 prompts → 包含匹配 prompts → 名称包含匹配；收入/支出类别各自匹配，若同时匹配到则返回收入
 

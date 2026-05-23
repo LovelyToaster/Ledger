@@ -27,6 +27,7 @@ data class Record(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val deleted: Boolean = false,
+    val excludeFromBudget: Boolean = false,
     val address: String = "",
     val latitude: Double? = null,
     val longitude: Double? = null

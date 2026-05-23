@@ -8,6 +8,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.NotInterested
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,11 +19,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
 import com.verdantgem.ledger.data.repository.LedgerRepository
 import com.verdantgem.ledger.ui.components.DateTimePickerDialog
+import com.verdantgem.ledger.ui.components.QuickCategoryPicker
 import com.verdantgem.ledger.ui.components.formatDateTime
 import com.verdantgem.ledger.ui.theme.dimens
 import androidx.lifecycle.ViewModel
@@ -45,6 +49,12 @@ class RecordDetailViewModel @Inject constructor(
     private val _showDatePicker = MutableStateFlow(false)
     val showDatePicker: StateFlow<Boolean> = _showDatePicker
 
+    private val _showNoteEditDialog = MutableStateFlow(false)
+    val showNoteEditDialog: StateFlow<Boolean> = _showNoteEditDialog
+
+    private val _showCategoryPicker = MutableStateFlow(false)
+    val showCategoryPicker: StateFlow<Boolean> = _showCategoryPicker
+
     val allCategories: StateFlow<List<Category>> = repository.allCategories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -58,11 +68,41 @@ class RecordDetailViewModel @Inject constructor(
     fun showDatePickerDialog() { _showDatePicker.value = true }
     fun dismissDatePicker() { _showDatePicker.value = false }
 
+    fun showNoteEditDialog() { _showNoteEditDialog.value = true }
+    fun dismissNoteEditDialog() { _showNoteEditDialog.value = false }
+
+    fun showCategoryPickerDialog() { _showCategoryPicker.value = true }
+    fun dismissCategoryPickerDialog() { _showCategoryPicker.value = false }
+
     fun updateBillDate(newDate: Long) {
         viewModelScope.launch {
             repository.updateRecordBillDate(currentRecordId, newDate)
             _record.value = repository.getRecordById(currentRecordId)
             _showDatePicker.value = false
+        }
+    }
+
+    fun updateNote(newNote: String) {
+        viewModelScope.launch {
+            repository.updateRecordNote(currentRecordId, newNote)
+            _record.value = repository.getRecordById(currentRecordId)
+            _showNoteEditDialog.value = false
+        }
+    }
+
+    fun updateCategory(categoryName: String) {
+        viewModelScope.launch {
+            val cat = allCategories.value.find { it.name == categoryName } ?: return@launch
+            repository.updateRecordCategory(currentRecordId, cat.id, cat.name)
+            _record.value = repository.getRecordById(currentRecordId)
+            _showCategoryPicker.value = false
+        }
+    }
+
+    fun toggleExcludeFromBudget(exclude: Boolean) {
+        viewModelScope.launch {
+            repository.updateRecordExcludeFromBudget(currentRecordId, exclude)
+            _record.value = repository.getRecordById(currentRecordId)
         }
     }
 }
@@ -77,6 +117,8 @@ fun RecordDetailScreen(
     val record by viewModel.record.collectAsState()
     val allCategories by viewModel.allCategories.collectAsState()
     val showDatePicker by viewModel.showDatePicker.collectAsState()
+    val showNoteEditDialog by viewModel.showNoteEditDialog.collectAsState()
+    val showCategoryPicker by viewModel.showCategoryPicker.collectAsState()
     val d = MaterialTheme.dimens
 
     LaunchedEffect(recordId) {
@@ -109,14 +151,28 @@ fun RecordDetailScreen(
                     verticalAlignment = Alignment.Bottom,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    val cat = allCategories.find { it.name == currentRecord.categoryName }
-                    val displayName = if (cat?.parentName != null) "${cat.parentName}-${cat.name}" else currentRecord.categoryName
-                    Text(
-                        text = displayName,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val cat = allCategories.find { it.name == currentRecord.categoryName }
+                        val displayName = if (cat?.parentName != null) "${cat.parentName}-${cat.name}" else currentRecord.categoryName
+                        Text(
+                            text = displayName,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        IconButton(
+                            onClick = { viewModel.showCategoryPickerDialog() },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = "修改分类",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
                             text = "金额",
@@ -179,11 +235,58 @@ fun RecordDetailScreen(
                             value = currentRecord.address.ifEmpty { "暂无位置数据" }
                         )
                         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), thickness = 0.5.dp)
-                        DetailItem(
-                            icon = Icons.Default.Notes,
-                            label = "备注",
-                            value = currentRecord.note.ifEmpty { "无备注" }
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            DetailItem(
+                                icon = Icons.Default.Notes,
+                                label = "备注",
+                                value = currentRecord.note.ifEmpty { "无备注" },
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = { viewModel.showNoteEditDialog() },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = "修改备注",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), thickness = 0.5.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.NotInterested,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "不计入预算",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "开启后该账单不计入月度预算统计",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                            Switch(
+                                checked = currentRecord.excludeFromBudget,
+                                onCheckedChange = { viewModel.toggleExcludeFromBudget(it) }
+                            )
+                        }
                     }
                 }
             }
@@ -200,6 +303,60 @@ fun RecordDetailScreen(
             onConfirm = { viewModel.updateBillDate(it) },
             onDismiss = { viewModel.dismissDatePicker() }
         )
+    }
+
+    if (showNoteEditDialog && currentRecord != null) {
+        var noteText by remember(currentRecord) { mutableStateOf(currentRecord.note) }
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissNoteEditDialog() },
+            title = { Text("编辑备注") },
+            text = {
+                OutlinedTextField(
+                    value = noteText,
+                    onValueChange = { noteText = it },
+                    label = { Text("备注") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 4
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.updateNote(noteText) }) {
+                    Text("保存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissNoteEditDialog() }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (showCategoryPicker && currentRecord != null) {
+        val currentCat = allCategories.find { it.name == currentRecord.categoryName }
+        Dialog(
+            onDismissRequest = { viewModel.dismissCategoryPickerDialog() },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .wrapContentHeight()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    QuickCategoryPicker(
+                        categories = allCategories,
+                        selectedCategory = currentRecord.categoryName,
+                        effectiveCategory = currentCat,
+                        onCategoryChange = { name ->
+                            viewModel.updateCategory(name)
+                        },
+                        onDismiss = { viewModel.dismissCategoryPickerDialog() }
+                    )
+                }
+            }
+        }
     }
 }
 
