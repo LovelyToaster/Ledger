@@ -2,6 +2,7 @@
 
 ## 项目信息
 - 包名：`com.verdantgem.ledger`
+- 当前版本：1.3.1（versionCode = 5）
 - 技术栈：Kotlin + Jetpack Compose + Hilt + Room + Paging 3 + OkHttp + Apache POI (XLS)
 - 最低 SDK：26 (Android 8.0)
 - 目标 SDK：36 (Android 16)
@@ -17,7 +18,7 @@
 - **定位服务**：`LocationProvider`（Hilt `@Singleton`），`getAddress()` 每次调用创建/销毁 `AMapLocationClient`，`finally` 中确保 `onDestroy()` 释放系统连接
 - **生命周期**：进入记账界面 → `startLocation()` → 定位完成自动 `onDestroy()`；退出界面 → `DisposableEffect.onDispose` / `onCleared` → `stopLocation()` 取消 job；保存前 `locationJob?.join()` 等待定位完成
 - **防重复**：`startLocation()` 有双重 guard — 已有有效地址不重复获取，已有正在执行的 job 不重复启动
-- **数据库版本**：v6（`MIGRATION_4_5` 新增 `updatedAt`、`deleted` 字段；`MIGRATION_5_6` 新增 `excludeFromBudget` 字段）
+- **数据库版本**：v7（`MIGRATION_4_5` 新增 `updatedAt`、`deleted` 字段；`MIGRATION_5_6` 新增 `excludeFromBudget` 字段；`MIGRATION_6_7` 新增 `syncUuid` 全局唯一标识字段）
 - **RecordDetailScreen**：仍然显示已保存的 `Record.address` 字段（若有）；支持编辑备注/类别/不计入预算开关
 
 ## 预算功能
@@ -61,6 +62,9 @@
 ### 同步策略：Last-Write-Wins 增量合并
 - 导出全量数据为 JSON 快照，上传到 WebDAV 的 `简记账/{用户名}/ledger_sync.json`
 - 下载远程快照，逐实体比对 `updatedAt`，时间戳较新的覆盖
+- **身份匹配**：使用 `syncUuid`（UUID 字符串）而非本地自增 `id` 进行跨设备实体匹配，解决多设备独立写入时 auto-increment ID 冲突导致的数据覆盖问题
+- `Record`、`Category`、`Budget` 均包含 `syncUuid: String` 字段，新创建时自动生成 `UUID.randomUUID().toString()`，旧数据通过 `MIGRATION_6_7` 使用 `hex(randomblob(16))` 填充
+- `insertRecordForSync`/`upsertCategoryForSync`/`upsertBudgetForSync` 先按 `syncUuid` 查找已有记录，存在则保留本地 `id` 更新内容，不存在则新建
 - 使用 `kotlinx.serialization` 格式化，Hilt `@Singleton` 管理状态
 
 ### 多用户隔离
@@ -88,7 +92,7 @@
 
 ### 触发机制
 - **启动时**：`LedgerApplication.onCreate()` → 如果 `autoSyncEnabled`，执行一次 `fullSync()`
-- **数据变更时**（运行中）：`DataChangeNotifier`（SharedFlow）→ `SyncManager` 30 秒 debounce → `fullSync()`
+- **数据变更时**（运行中）：`DataChangeNotifier`（SharedFlow）→ `SyncManager` 5 秒 debounce → `fullSync()`（缩短 debounce 提升同步及时性，降低"未同步即关闭"导致的数据丢失风险）
 - **回前台时**（App 从后台切回）：`ProcessLifecycleOwner.onStart()` → `SyncManager.onAppForegrounded()` → 如果后台停留超过 30 秒，自动拉取同步
 - **退出时**（App 进入后台）：`ProcessLifecycleOwner.onStop()` → 如果 dirty 标记为 true → 同步 + 备份
 - **脏标记优化**：`AtomicBoolean dirty`，同步成功后置 false，退出时仅 dirty=true 才同步，避免重复
@@ -149,7 +153,7 @@
 ## 主界面时间轴
 - **分组标题**：`DashboardViewModel.getDateGroupLabel()` 保留 "今天""昨天" 为文字标签，其余显示具体日期
 - **日期格式**：本年显示 `MM-dd`（如 `03-15`），非本年显示 `yyyy-MM-dd`（如 `2025-12-01`）
-- **每日收支**：标题行右侧显示当日收支汇总 `"收入 xxx 支出 xxx"`，数据来源于 `DashboardViewModel.dailyAggregates`（基于近 6 个月记录按 `getDateGroupLabel` 分组汇总）
+- **每日收支**：标题行右侧显示当日收支汇总 `"收入 xxx 支出 xxx"`，金额保留两位小数（`String.format("%.2f", ...)`），数据来源于 `DashboardViewModel.dailyAggregates`（基于近 6 个月记录按 `getDateGroupLabel` 分组汇总）
 
 ## 统计界面排名列表
 - **数据**：`StatisticsViewModel.activeRanking`（`StateFlow<List<CategoryRank>>`），从 `activeCategoryDistribution` 派生，按金额降序，含百分比
