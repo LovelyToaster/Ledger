@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.verdantgem.ledger.BuildConfig
 import com.verdantgem.ledger.ui.theme.dimens
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,7 +56,7 @@ fun AboutScreen(onNavigateToSettings: () -> Unit) {
 
             Spacer(modifier = Modifier.height(d.spacingMd))
             Text(text = "简记账", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text(text = "Version 1.3.0", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+            Text(text = "Version ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
             
             Spacer(modifier = Modifier.height(d.spacingXl))
 
