@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -156,9 +157,11 @@ fun RecordDetailScreen(
                         val displayName = if (cat?.parentName != null) "${cat.parentName}-${cat.name}" else currentRecord.categoryName
                         Text(
                             text = displayName,
-                            style = MaterialTheme.typography.headlineMedium,
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         IconButton(
@@ -182,7 +185,7 @@ fun RecordDetailScreen(
                         val isIncome = allCategories.find { it.name == currentRecord.categoryName }?.isIncome == true
                         Text(
                             text = "${if (isIncome) "+ " else "- "}\uFFE5${String.format("%.2f", currentRecord.amount)}",
-                            style = MaterialTheme.typography.headlineSmall,
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = if (isIncome) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                         )

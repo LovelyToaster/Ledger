@@ -233,13 +233,13 @@ fun DashboardScreen(
                                         if (agg != null) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Text(
-                                                    text = "收入 ${String.format("%.0f", agg.totalIncome)}",
+                                                    text = "收入 ${String.format("%.2f", agg.totalIncome)}",
                                                     style = MaterialTheme.typography.labelLarge,
                                                     color = Color(0xFF43A047)
                                                 )
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Text(
-                                                    text = "支出 ${String.format("%.0f", agg.totalExpense)}",
+                                                    text = "支出 ${String.format("%.2f", agg.totalExpense)}",
                                                     style = MaterialTheme.typography.labelLarge,
                                                     color = Color(0xFFE53935)
                                                 )
