@@ -1,6 +1,8 @@
 package com.verdantgem.ledger.ui.screens.settings
 
+import android.content.Intent
 import android.net.Uri
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -8,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.verdantgem.ledger.MainActivity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,13 +34,24 @@ fun ImportExportScreen(
     val preview by viewModel::preview
     val result by viewModel::result
     val error by viewModel::error
+    val isRestoring by viewModel::isRestoring
+    val restoreSuccess by viewModel::restoreSuccess
 
-    // 文件选择器
+    // 导入文件选择器（XLS）
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
             viewModel.parseFile(context.contentResolver, uri)
+        }
+    }
+
+    // 备份还原文件选择器（DB）
+    val restorePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.restoreDatabase(context.contentResolver, uri)
         }
     }
 
@@ -61,11 +76,34 @@ fun ImportExportScreen(
     if (error != null) {
         AlertDialog(
             onDismissRequest = { viewModel.reset() },
-            title = { Text("导入失败") },
+            title = { Text(if (restoreSuccess) "还原完成" else "操作失败") },
             text = { Text(error!!) },
             confirmButton = {
                 TextButton(onClick = { viewModel.reset() }) {
                     Text("确定")
+                }
+            }
+        )
+    }
+
+    // 还原成功弹窗（需重启）
+    if (restoreSuccess) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("还原完成") },
+            text = {
+                Text("数据库已成功替换，应用需要重启以加载新数据。")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.reset()
+                    val intent = Intent(context, MainActivity::class.java)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                    (context as? ComponentActivity)?.finishAffinity()
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                }) {
+                    Text("重启应用")
                 }
             }
         )
@@ -198,6 +236,59 @@ fun ImportExportScreen(
                             Text("解析中...")
                         } else {
                             Text("选择文件")
+                        }
+                    }
+                }
+            }
+
+            // 还原备份卡片
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.Default.Restore,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("从备份恢复", style = MaterialTheme.typography.titleMedium)
+                            Text("选择 SQLite 数据库文件 (.db) 替换当前数据",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            restorePickerLauncher.launch(
+                                arrayOf("application/octet-stream", "application/x-sqlite3")
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isParsing && !isImporting && !isRestoring
+                    ) {
+                        if (isRestoring) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("恢复中...")
+                        } else {
+                            Text("选择备份文件")
                         }
                     }
                 }

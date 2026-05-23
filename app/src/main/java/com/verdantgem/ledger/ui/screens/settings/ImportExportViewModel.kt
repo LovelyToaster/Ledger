@@ -1,6 +1,7 @@
 package com.verdantgem.ledger.ui.screens.settings
 
 import android.content.ContentResolver
+import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -10,9 +11,11 @@ import androidx.lifecycle.viewModelScope
 import com.verdantgem.ledger.data.importer.XlsImporter
 import com.verdantgem.ledger.data.repository.LedgerRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 
 data class ImportPreview(
@@ -36,6 +39,7 @@ data class ImportResult(
 
 @HiltViewModel
 class ImportExportViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val ledgerRepository: LedgerRepository,
     private val xlsImporter: XlsImporter
 ) : ViewModel() {
@@ -51,6 +55,11 @@ class ImportExportViewModel @Inject constructor(
     var result by mutableStateOf<ImportResult?>(null)
         private set
     var error by mutableStateOf<String?>(null)
+        private set
+
+    var isRestoring by mutableStateOf(false)
+        private set
+    var restoreSuccess by mutableStateOf(false)
         private set
 
     private var pendingMatchedRows: List<XlsImporter.MatchedRow> = emptyList()
@@ -157,5 +166,42 @@ class ImportExportViewModel @Inject constructor(
         error = null
         importProgress = null
         pendingMatchedRows = emptyList()
+        isRestoring = false
+        restoreSuccess = false
+    }
+
+    /**
+     * 从 SQLite 备份文件恢复数据库
+     */
+    fun restoreDatabase(contentResolver: ContentResolver, uri: Uri) {
+        if (isRestoring) return
+        isRestoring = true
+        error = null
+        restoreSuccess = false
+
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val dbFile = context.getDatabasePath("ledger_db")
+
+                    // 复制备份文件到数据库路径
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        dbFile.parentFile?.mkdirs()
+                        dbFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    } ?: throw IllegalStateException("无法打开备份文件")
+
+                    // 删除 WAL 和 SHM 日志文件，避免旧日志干扰
+                    File(dbFile.absolutePath + "-wal").delete()
+                    File(dbFile.absolutePath + "-shm").delete()
+                }
+                restoreSuccess = true
+            } catch (e: Throwable) {
+                error = "恢复失败: ${e.localizedMessage ?: e.message}"
+            } finally {
+                isRestoring = false
+            }
+        }
     }
 }
