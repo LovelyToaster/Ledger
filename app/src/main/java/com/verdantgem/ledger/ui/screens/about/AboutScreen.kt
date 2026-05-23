@@ -55,7 +55,7 @@ fun AboutScreen(onNavigateToSettings: () -> Unit) {
 
             Spacer(modifier = Modifier.height(d.spacingMd))
             Text(text = "简记账", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text(text = "Version 1.1.0", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+            Text(text = "Version 1.3.0", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
             
             Spacer(modifier = Modifier.height(d.spacingXl))
 
