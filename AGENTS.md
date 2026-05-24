@@ -2,7 +2,7 @@
 
 ## 项目信息
 - 包名：`com.verdantgem.ledger`
-- 当前版本：1.3.1（versionCode = 5）
+- 当前版本：1.3.2（versionCode = 6）
 - 技术栈：Kotlin + Jetpack Compose + Hilt + Room + Paging 3 + OkHttp + Apache POI (XLS)
 - 最低 SDK：26 (Android 8.0)
 - 目标 SDK：36 (Android 16)
@@ -62,16 +62,22 @@
 ### 同步策略：Last-Write-Wins 增量合并
 - 导出全量数据为 JSON 快照，上传到 WebDAV 的 `简记账/{用户名}/ledger_sync.json`
 - 下载远程快照，逐实体比对 `updatedAt`，时间戳较新的覆盖
-- **身份匹配**：使用 `syncUuid`（UUID 字符串）而非本地自增 `id` 进行跨设备实体匹配，解决多设备独立写入时 auto-increment ID 冲突导致的数据覆盖问题
-- `Record`、`Category`、`Budget` 均包含 `syncUuid: String` 字段，新创建时自动生成 `UUID.randomUUID().toString()`，旧数据通过 `MIGRATION_6_7` 使用 `hex(randomblob(16))` 填充
+- **身份匹配**：使用 `syncUuid`（UUID 字符串）而非本地自增 `id` 进行跨设备实体匹配
 - `insertRecordForSync`/`upsertCategoryForSync`/`upsertBudgetForSync` 先按 `syncUuid` 查找已有记录，存在则保留本地 `id` 更新内容，不存在则新建
 - 使用 `kotlinx.serialization` 格式化，Hilt `@Singleton` 管理状态
+
+### 流量优化
+- **ETag 条件下载**：`WebDavClient.head()` 获取远程文件 ETag，与本地缓存比对，相同则跳过下载
+- **dirty 增量上传**：`fullSync()` 中 `push()` 前检查 `AtomicBoolean dirty`，本地无变更则跳过上传
+- **传输层 Gzip 压缩**：`SyncFile` 外层整个 JSON 文件 gzip 压缩后上传，魔数检测兼容旧格式
+- **加密内层压缩**：启用加密时，先 gzip 压缩 snapshot JSON 再加密（`SyncFile.z = true`），避免 AES-GCM 密文无法被外层 gzip 压缩的问题；解密时检测 `z` 标记自动解压
+- **备份压缩**：SQLite 数据库备份同样 gzip 压缩为 `.db.gz` 后上传
 
 ### 多用户隔离
 - 每个用户通过「同步身份」设置中的用户名隔离到独立子目录
 - 路径格式：`{URL}/简记账/{syncUsername}/`（使用 `Uri.encode` 编码中文/特殊字符）
 - 不同用户使用不同用户名，数据完全隔离，不互相干扰
-- 自动备份也按用户隔离：`简记账/{用户名}/ledger_backup_*.db`
+- 自动备份也按用户隔离：`简记账/{用户名}/ledger_backup_*.db.gz`
 - 同一用户的多台设备使用相同用户名即可互通
 
 ### 加密（可选）
@@ -100,17 +106,17 @@
 - **同步状态**：`SyncManager.isSyncing`（`StateFlow<Boolean>`）暴露给 UI，Dashboard 和设置页均可观察
 
 ### 自动备份
-- `SyncManager.backupDatabase()` — 上传 SQLite `.db` 文件到 `简记账/ledger_backup_*.db`
+- `SyncManager.backupDatabase()` — 上传 SQLite `.db` 文件到 `简记账/ledger_backup_*.db.gz`（gzip 压缩）
 - 保留最近 5 个备份，自动清理旧文件
 - 仅在 App 退出时、且 `autoBackupEnabled=true` 时触发
 
 ### 核心文件
 | 文件 | 职责 |
 |------|------|
-| `data/remote/WebDavClient.kt` | 封装 OKHttp WebDAV 操作（PUT/GET/PROPFIND/DELETE/MKCOL）；`testConnection()` 先 MKCOL 创建 `简记账/` 目录再 PROPFIND |
+| `data/remote/WebDavClient.kt` | 封装 OKHttp WebDAV 操作（PUT/GET/HEAD/PROPFIND/DELETE/MKCOL）；`testConnection()` 先 MKCOL 创建 `简记账/` 目录再 PROPFIND |
 | `data/remote/CryptoManager.kt` | AES-256-GCM 加解密 |
-| `data/remote/SyncSnapshot.kt` | 同步快照数据结构 + Entity ↔ Sync 转换函数 |
-| `data/remote/SyncManager.kt` | 核心同步编排：pull → merge → push + backup；`ensureDir()` 确保远程目录存在后操作；`isSyncing` StateFlow 暴露全局同步状态 |
+| `data/remote/SyncSnapshot.kt` | 同步快照数据结构 + Entity ↔ Sync 转换函数；`SyncFile.z` 标记内层压缩 |
+| `data/remote/SyncManager.kt` | 核心同步编排：pull → merge → push + backup；ETag 条件下载、dirty 增量上传、Gzip 压缩；`isSyncing` StateFlow 暴露全局同步状态 |
 | `data/DataChangeNotifier.kt` | 数据变更事件通知器 |
 | `ui/screens/settings/SettingsViewModel.kt` | 同步状态管理（加密密码、自动备份开关、手动触发）；`saveConfig()` 仅在配置变化时重置测试状态 |
 | `ui/screens/settings/WebDavConfigScreen.kt` | 配置 UI（加密密码弹窗、同步状态展示） |
