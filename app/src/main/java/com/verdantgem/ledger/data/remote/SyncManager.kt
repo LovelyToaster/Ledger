@@ -17,12 +17,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.text.SimpleDateFormat
+import java.util.Base64
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.CoroutineContext
@@ -109,6 +114,7 @@ class SyncManager @Inject constructor(
         user: String,
         pass: String
     ): SyncResult = withContext(Dispatchers.IO) {
+        val tempFile = File(context.cacheDir, "backup_upload_temp")
         try {
             val username = prefs.getString("sync_username", "") ?: ""
             if (username.isBlank()) return@withContext SyncResult.Error("Sync username not configured")
@@ -116,13 +122,19 @@ class SyncManager @Inject constructor(
             val dbFile = context.getDatabasePath("ledger_db")
             if (!dbFile.exists()) return@withContext SyncResult.Error("Database not found")
 
+            // Gzip 压缩数据库文件
+            GZIPOutputStream(tempFile.outputStream()).use { gzip ->
+                dbFile.inputStream().use { input -> input.copyTo(gzip) }
+                gzip.finish()
+            }
+
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val backupFilename = "ledger_backup_$timestamp.db"
+            val backupFilename = "ledger_backup_$timestamp.db.gz"
             val remoteDir = ensureSubPath(url, username)
             val remoteUrl = remoteDir + backupFilename
 
             webDavClient.mkdir(remoteDir, user, pass)
-            val result = webDavClient.backup(remoteUrl, user, pass, dbFile)
+            val result = webDavClient.backup(remoteUrl, user, pass, tempFile)
             if (result.isFailure) {
                 return@withContext SyncResult.Error(result.exceptionOrNull()?.message ?: "Backup upload failed")
             }
@@ -132,7 +144,7 @@ class SyncManager @Inject constructor(
             if (listResult.isSuccess) {
                 val backups = listResult.getOrThrow()
                     .map { it.trimStart('/').substringAfterLast('/') }
-                    .filter { it.startsWith("ledger_backup_") && it.endsWith(".db") }
+                    .filter { it.startsWith("ledger_backup_") && it.endsWith(".db.gz") }
                     .sorted()
                 if (backups.size > MAX_BACKUPS) {
                     backups.take(backups.size - MAX_BACKUPS).forEach { old ->
@@ -143,6 +155,8 @@ class SyncManager @Inject constructor(
             SyncResult.Success
         } catch (e: Exception) {
             SyncResult.Error(e.message ?: "Backup failed")
+        } finally {
+            if (tempFile.exists()) tempFile.delete()
         }
     }
 
@@ -207,11 +221,16 @@ class SyncManager @Inject constructor(
                         if (pullResult is SyncResult.Error && pullResult.message != "Remote file not found") {
                             return@withContext pullResult
                         }
-                        val pushResult = push(url, user, pass, cryptoPassword, syncUsername, dispatcher)
-                        if (pushResult is SyncResult.Success) {
-                            dirty.set(false)
+                        // 仅本地有变更时才推送，节省上传流量
+                        if (dirty.get()) {
+                            val pushResult = push(url, user, pass, cryptoPassword, syncUsername, dispatcher)
+                            if (pushResult is SyncResult.Success) {
+                                dirty.set(false)
+                            }
+                            pushResult
+                        } else {
+                            SyncResult.Success
                         }
-                        pushResult
                     } catch (e: Exception) {
                         SyncResult.Error(e.message ?: "Unknown sync error")
                     }
@@ -229,6 +248,19 @@ class SyncManager @Inject constructor(
         val tempFile = File(context.cacheDir, "sync_download_temp")
         try {
             val remoteUrl = ensureSubPath(url, username) + syncFile
+
+            // ETag 检查：远程文件未变更则跳过下载
+            val headResult = webDavClient.head(remoteUrl, user, pass)
+            val remoteEtag: String? = if (headResult.isSuccess) {
+                headResult.getOrThrow()["etag"]
+            } else {
+                null
+            }
+            val lastEtag = prefs.getString(KEY_LAST_REMOTE_ETAG, null)
+            if (remoteEtag != null && lastEtag != null && remoteEtag == lastEtag) {
+                return@withContext SyncResult.Success
+            }
+
             val downloadResult = webDavClient.restore(remoteUrl, user, pass, tempFile)
             if (downloadResult.isFailure) {
                 val error = downloadResult.exceptionOrNull()
@@ -239,19 +271,33 @@ class SyncManager @Inject constructor(
                 }
             }
 
-            val rawJson = tempFile.readText()
+            val rawBytes = tempFile.readBytes()
+            val rawJson = decompress(rawBytes)
             val syncFileWrapper = json.decodeFromString<SyncFile>(rawJson)
             val snapshot = if (syncFileWrapper.encrypted) {
                 if (cryptoPassword.isNullOrBlank()) {
                     return@withContext SyncResult.Error("Encryption password required")
                 }
                 val decrypted = cryptoManager.decrypt(syncFileWrapper.ciphertext, cryptoPassword)
-                json.decodeFromString<SyncSnapshot>(decrypted)
+                val snapshotJson = if (syncFileWrapper.compressed) {
+                    // 新格式：解密 → base64 解码 → gzip 解压 → JSON
+                    val compressed = Base64.getDecoder().decode(decrypted)
+                    decompress(compressed)
+                } else {
+                    // 旧格式：解密后直接就是 JSON
+                    decrypted
+                }
+                json.decodeFromString<SyncSnapshot>(snapshotJson)
             } else {
                 syncFileWrapper.data ?: return@withContext SyncResult.Error("Empty sync data")
             }
 
             mergeSnapshot(snapshot)
+
+            // 保存远程 ETag 以便下次比对
+            if (remoteEtag != null) {
+                prefs.edit().putString(KEY_LAST_REMOTE_ETAG, remoteEtag).apply()
+            }
             SyncResult.Success
         } catch (e: Exception) {
             SyncResult.Error(e.message ?: "Merge failed")
@@ -357,14 +403,18 @@ class SyncManager @Inject constructor(
 
             val syncFileWrapper = if (!cryptoPassword.isNullOrBlank()) {
                 val snapshotJson = json.encodeToString(SyncSnapshot.serializer(), snapshot)
-                val ciphertext = cryptoManager.encrypt(snapshotJson, cryptoPassword)
-                SyncFile(encrypted = true, ciphertext = ciphertext)
+                // 加密前先压缩：gzip 压缩 → base64 → 加密，使密文体积大幅减小
+                val compressed = compress(snapshotJson)
+                val compressedBase64 = Base64.getEncoder().encodeToString(compressed)
+                val ciphertext = cryptoManager.encrypt(compressedBase64, cryptoPassword)
+                SyncFile(encrypted = true, compressed = true, ciphertext = ciphertext)
             } else {
                 SyncFile(data = snapshot)
             }
 
             val outputJson = json.encodeToString(SyncFile.serializer(), syncFileWrapper)
-            tempFile.writeText(outputJson)
+            val compressed = compress(outputJson)
+            tempFile.writeBytes(compressed)
 
             val remoteUrl = ensureSubPath(url, username) + syncFile
             val uploadResult = webDavClient.backup(remoteUrl, user, pass, tempFile)
@@ -383,7 +433,27 @@ class SyncManager @Inject constructor(
         }
     }
 
+    /**
+     * Gzip 压缩
+     */
+    private fun compress(text: String): ByteArray {
+        val bos = ByteArrayOutputStream()
+        GZIPOutputStream(bos).use { gzip ->
+            gzip.write(text.toByteArray(Charsets.UTF_8))
+            gzip.finish()
+        }
+        return bos.toByteArray()
+    }
+
+    /**
+     * Gzip 解压
+     */
+    private fun decompress(bytes: ByteArray): String {
+        return GZIPInputStream(ByteArrayInputStream(bytes)).bufferedReader().use { it.readText() }
+    }
+
     companion object {
         private const val MAX_BACKUPS = 5
+        private const val KEY_LAST_REMOTE_ETAG = "last_remote_etag"
     }
 }

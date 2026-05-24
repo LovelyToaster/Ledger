@@ -165,4 +165,30 @@ class WebDavClient @Inject constructor() {
             }
         }
     }
+
+    /**
+     * 发送 HEAD 请求获取远程文件响应头，用于 ETag 比对判断文件是否变更
+     */
+    suspend fun head(
+        url: String,
+        user: String,
+        pass: String
+    ): Result<Map<String, String>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val credential = Credentials.basic(user, pass)
+            val request = Request.Builder()
+                .url(url)
+                .head()
+                .header("Authorization", credential)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val headers = mutableMapOf<String, String>()
+                response.headers.forEach { (name, value) ->
+                    headers[name.lowercase()] = value
+                }
+                headers
+            }
+        }
+    }
 }

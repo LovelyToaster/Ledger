@@ -7,6 +7,7 @@ import kotlinx.serialization.Serializable
 data class SyncFile(
     @SerialName("v") val version: Int = 1,
     @SerialName("e") val encrypted: Boolean = false,
+    @SerialName("z") val compressed: Boolean = false,
     @SerialName("d") val data: SyncSnapshot? = null,
     @SerialName("s") val salt: String = "",
     @SerialName("i") val iv: String = "",
