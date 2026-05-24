@@ -78,4 +78,7 @@ interface RecordDao {
 
     @Query("UPDATE records SET excludeFromBudget = :exclude, updatedAt = :now WHERE id = :id")
     suspend fun updateRecordExcludeFromBudget(id: Long, exclude: Boolean, now: Long = System.currentTimeMillis())
+
+    @Query("UPDATE records SET amount = :amount, updatedAt = :now WHERE id = :id")
+    suspend fun updateRecordAmount(id: Long, amount: Double, now: Long = System.currentTimeMillis())
 }

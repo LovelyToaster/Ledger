@@ -125,6 +125,11 @@ class LedgerRepository @Inject constructor(
         changeNotifier.notifyChange()
     }
 
+    suspend fun updateRecordAmount(id: Long, amount: Double) {
+        recordDao.updateRecordAmount(id, amount)
+        changeNotifier.notifyChange()
+    }
+
     suspend fun saveBudget(amount: Double) {
         budgetDao.upsertBudget(Budget(monthlyAmount = amount))
         changeNotifier.notifyChange()

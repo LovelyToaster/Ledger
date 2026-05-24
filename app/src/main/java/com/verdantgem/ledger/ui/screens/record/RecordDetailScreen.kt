@@ -3,13 +3,16 @@ package com.verdantgem.ledger.ui.screens.record
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.List as ListIcon
 import androidx.compose.material.icons.filled.NotInterested
 import androidx.compose.material.icons.filled.Notes
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,6 +60,9 @@ class RecordDetailViewModel @Inject constructor(
     private val _showCategoryPicker = MutableStateFlow(false)
     val showCategoryPicker: StateFlow<Boolean> = _showCategoryPicker
 
+    private val _showAmountEditDialog = MutableStateFlow(false)
+    val showAmountEditDialog: StateFlow<Boolean> = _showAmountEditDialog
+
     val allCategories: StateFlow<List<Category>> = repository.allCategories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -74,6 +81,9 @@ class RecordDetailViewModel @Inject constructor(
 
     fun showCategoryPickerDialog() { _showCategoryPicker.value = true }
     fun dismissCategoryPickerDialog() { _showCategoryPicker.value = false }
+
+    fun showAmountEditDialog() { _showAmountEditDialog.value = true }
+    fun dismissAmountEditDialog() { _showAmountEditDialog.value = false }
 
     fun updateBillDate(newDate: Long) {
         viewModelScope.launch {
@@ -106,6 +116,14 @@ class RecordDetailViewModel @Inject constructor(
             _record.value = repository.getRecordById(currentRecordId)
         }
     }
+
+    fun updateAmount(newAmount: Double) {
+        viewModelScope.launch {
+            repository.updateRecordAmount(currentRecordId, newAmount)
+            _record.value = repository.getRecordById(currentRecordId)
+            _showAmountEditDialog.value = false
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -120,6 +138,7 @@ fun RecordDetailScreen(
     val showDatePicker by viewModel.showDatePicker.collectAsState()
     val showNoteEditDialog by viewModel.showNoteEditDialog.collectAsState()
     val showCategoryPicker by viewModel.showCategoryPicker.collectAsState()
+    val showAmountEditDialog by viewModel.showAmountEditDialog.collectAsState()
     val d = MaterialTheme.dimens
 
     LaunchedEffect(recordId) {
@@ -147,53 +166,6 @@ fun RecordDetailScreen(
                     .fillMaxSize()
                     .padding(16.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val cat = allCategories.find { it.name == currentRecord.categoryName }
-                        val displayName = if (cat?.parentName != null) "${cat.parentName}-${cat.name}" else currentRecord.categoryName
-                        Text(
-                            text = displayName,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        IconButton(
-                            onClick = { viewModel.showCategoryPickerDialog() },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Edit,
-                                contentDescription = "修改分类",
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "金额",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        val isIncome = allCategories.find { it.name == currentRecord.categoryName }?.isIncome == true
-                        Text(
-                            text = "${if (isIncome) "+ " else "- "}\uFFE5${String.format("%.2f", currentRecord.amount)}",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isIncome) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(d.spacingXl))
-
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
@@ -202,6 +174,61 @@ fun RecordDetailScreen(
                     )
                 ) {
                     Column(modifier = Modifier.padding(24.dp)) {
+                        // 类别
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            val cat = allCategories.find { it.name == currentRecord.categoryName }
+                            val displayName = if (cat?.parentName != null) "${cat.parentName}-${cat.name}" else currentRecord.categoryName
+                            DetailItem(
+                                icon = Icons.Default.ListIcon,
+                                label = "类别",
+                                value = displayName,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = { viewModel.showCategoryPickerDialog() },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = "修改类别",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), thickness = 0.5.dp)
+
+                        // 金额
+                        val isIncome = allCategories.find { it.name == currentRecord.categoryName }?.isIncome == true
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            DetailItem(
+                                icon = Icons.Default.ShoppingCart,
+                                label = "金额",
+                                value = "${if (isIncome) "+ " else "- "}\uFFE5${String.format("%.2f", currentRecord.amount)}",
+                                valueColor = if (isIncome) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = { viewModel.showAmountEditDialog() },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = "修改金额",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), thickness = 0.5.dp)
+
+                        // 账单时间
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
@@ -289,9 +316,51 @@ fun RecordDetailScreen(
                                 checked = currentRecord.excludeFromBudget,
                                 onCheckedChange = { viewModel.toggleExcludeFromBudget(it) }
                             )
+        }
+    }
+
+    if (showAmountEditDialog && currentRecord != null) {
+        var amountText by remember(currentRecord) { mutableStateOf(currentRecord.amount.toString()) }
+        var amountError by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissAmountEditDialog() },
+            title = { Text("编辑金额") },
+            text = {
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = {
+                        amountText = it
+                        amountError = it.toDoubleOrNull() == null || (it.toDoubleOrNull() ?: 0.0) <= 0
+                    },
+                    label = { Text("金额") },
+                    supportingText = { if (amountError) Text("请输入有效的正数金额") },
+                    isError = amountError,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newAmount = amountText.toDoubleOrNull()
+                        if (newAmount != null && newAmount > 0) {
+                            viewModel.updateAmount(newAmount)
                         }
-                    }
+                    },
+                    enabled = !amountError && amountText.toDoubleOrNull() != null && (amountText.toDoubleOrNull() ?: 0.0) > 0
+                ) {
+                    Text("保存")
                 }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissAmountEditDialog() }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+}
             }
         } else {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -361,6 +430,48 @@ fun RecordDetailScreen(
             }
         }
     }
+
+    if (showAmountEditDialog && currentRecord != null) {
+        var amountText by remember(currentRecord) { mutableStateOf(currentRecord.amount.toString()) }
+        var amountError by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissAmountEditDialog() },
+            title = { Text("编辑金额") },
+            text = {
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = {
+                        amountText = it
+                        amountError = it.toDoubleOrNull() == null || (it.toDoubleOrNull() ?: 0.0) <= 0
+                    },
+                    label = { Text("金额") },
+                    supportingText = { if (amountError) Text("请输入有效的正数金额") },
+                    isError = amountError,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newAmount = amountText.toDoubleOrNull()
+                        if (newAmount != null && newAmount > 0) {
+                            viewModel.updateAmount(newAmount)
+                        }
+                    },
+                    enabled = !amountError && amountText.toDoubleOrNull() != null && (amountText.toDoubleOrNull() ?: 0.0) > 0
+                ) {
+                    Text("保存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissAmountEditDialog() }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -369,6 +480,7 @@ fun DetailItem(
     label: String,
     value: String,
     iconTint: Color = MaterialTheme.colorScheme.primary,
+    valueColor: Color = Color.Unspecified,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -385,7 +497,12 @@ fun DetailItem(
         Column {
             Text(text = label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(text = value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = if (valueColor != Color.Unspecified) valueColor else Color.Unspecified
+            )
         }
     }
 }

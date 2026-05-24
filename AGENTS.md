@@ -19,7 +19,7 @@
 - **生命周期**：进入记账界面 → `startLocation()` → 定位完成自动 `onDestroy()`；退出界面 → `DisposableEffect.onDispose` / `onCleared` → `stopLocation()` 取消 job；保存前 `locationJob?.join()` 等待定位完成
 - **防重复**：`startLocation()` 有双重 guard — 已有有效地址不重复获取，已有正在执行的 job 不重复启动
 - **数据库版本**：v7（`MIGRATION_4_5` 新增 `updatedAt`、`deleted` 字段；`MIGRATION_5_6` 新增 `excludeFromBudget` 字段；`MIGRATION_6_7` 新增 `syncUuid` 全局唯一标识字段）
-- **RecordDetailScreen**：仍然显示已保存的 `Record.address` 字段（若有）；支持编辑备注/类别/不计入预算开关
+- **RecordDetailScreen**：仍然显示已保存的 `Record.address` 字段（若有）；支持编辑金额/备注/类别/不计入预算开关
 
 ## 预算功能
 - **数据模型**：`Budget` Entity（单例，id=1），`monthlyAmount` 存月预算金额
