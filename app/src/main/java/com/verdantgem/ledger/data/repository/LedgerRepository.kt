@@ -48,6 +48,7 @@ class LedgerRepository @Inject constructor(
     suspend fun deleteRecordsByIds(ids: Set<Long>) {
         val now = System.currentTimeMillis()
         ids.forEach { recordDao.softDeleteRecord(it, now) }
+        changeNotifier.notifyChange()
     }
 
     suspend fun quickRecord(input: String, categoryName: String? = null, isIncome: Boolean = false, addressResult: AddressResult? = null, billDate: Long = System.currentTimeMillis()): Boolean {
