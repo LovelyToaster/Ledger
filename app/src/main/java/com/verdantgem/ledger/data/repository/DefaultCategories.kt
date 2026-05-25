@@ -68,14 +68,13 @@ object DefaultCategories {
         Category(name = "棋牌桌游", parentName = "休闲娱乐", prompts = "棋牌,桌游,麻将,扑克", isIncome = false),
         Category(name = "游戏", parentName = "休闲娱乐", prompts = "游戏", isIncome = false),
         Category(name = "运动健身", parentName = "休闲娱乐", prompts = "运动,健身,游泳,瑜伽,跑步", isIncome = false),
-        Category(name = "足浴按摩", parentName = "休闲娱乐", prompts = "足浴,按摩,洗脚,推拿", isIncome = false),
+        Category(name = "足浴按摩", parentName = "休闲娱乐", prompts = "足浴,按摩,洗脚,推拿,洗澡", isIncome = false),
 
         Category(name = "报销", parentName = "收入", prompts = "报销,报销款", isIncome = true),
         Category(name = "补贴", parentName = "收入", prompts = "补贴,补助,津贴", isIncome = true),
         Category(name = "二手闲置", parentName = "收入", prompts = "二手,闲置,卖掉,转卖", isIncome = true),
         Category(name = "工资", parentName = "收入", prompts = "工资,薪水,薪资,月薪", isIncome = true),
         Category(name = "奖金", parentName = "收入", prompts = "奖金,年终奖,绩效,奖学金", isIncome = true),
-        Category(name = "奖学金", parentName = "收入", prompts = "奖学金", isIncome = true),
         Category(name = "其他", parentName = "收入", prompts = "其他收入,理财,利息", isIncome = true),
     )
 }
