@@ -2,7 +2,7 @@
 
 ## 项目信息
 - 包名：`com.verdantgem.ledger`
-- 当前版本：1.3.2（versionCode = 6）
+- 当前版本：1.3.3（versionCode = 7）
 - 技术栈：Kotlin + Jetpack Compose + Hilt + Room + Paging 3 + OkHttp + Apache POI (XLS)
 - 最低 SDK：26 (Android 8.0)
 - 目标 SDK：36 (Android 16)
