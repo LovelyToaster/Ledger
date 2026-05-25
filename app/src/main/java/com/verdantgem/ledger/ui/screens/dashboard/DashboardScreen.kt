@@ -79,9 +79,9 @@ fun DashboardScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
 
-    // 快速记账弹窗关闭时重置账单时间
+    // 快速记账弹窗打开时重置账单时间为当前时间
     LaunchedEffect(isSheetOpen) {
-        if (!isSheetOpen) {
+        if (isSheetOpen) {
             quickBillDate = System.currentTimeMillis()
         }
     }
