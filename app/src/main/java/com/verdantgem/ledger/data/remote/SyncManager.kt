@@ -333,7 +333,9 @@ class SyncManager @Inject constructor(
                     local != null && local.syncUuid.isNotBlank() -> local.syncUuid
                     else                                -> record.syncUuid
                 }
-                repository.insertRecordForSync(record.copy(syncUuid = syncUuid))
+                // 若按 id 找到本地记录，传入本地 id 更新而非新建
+                val finalId = local?.id ?: 0L
+                repository.insertRecordForSync(record.copy(id = finalId, syncUuid = syncUuid))
             } else if (local.deleted && !remote.deleted && remote.updatedAt > local.updatedAt) {
                 val record = remote.toRecord().copy(updatedAt = remote.updatedAt)
                 val syncUuid = when {
@@ -361,7 +363,9 @@ class SyncManager @Inject constructor(
                     local != null && local.syncUuid.isNotBlank() -> local.syncUuid
                     else                                 -> cat.syncUuid
                 }
-                repository.upsertCategoryForSync(cat.copy(syncUuid = syncUuid))
+                // 若按 id 找到本地记录，传入本地 id 更新而非新建，同时收敛 UUID
+                val finalId = local?.id ?: 0L
+                repository.upsertCategoryForSync(cat.copy(id = finalId, syncUuid = syncUuid))
             }
         }
 

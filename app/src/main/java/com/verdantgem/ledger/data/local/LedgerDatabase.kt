@@ -9,7 +9,7 @@ import com.verdantgem.ledger.data.model.Budget
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
 
-@Database(entities = [Category::class, Record::class, Budget::class, BrandMapping::class], version = 10, exportSchema = false)
+@Database(entities = [Category::class, Record::class, Budget::class, BrandMapping::class], version = 11, exportSchema = false)
 abstract class LedgerDatabase : RoomDatabase() {
     abstract fun recordDao(): RecordDao
     abstract fun categoryDao(): CategoryDao
@@ -73,6 +73,20 @@ abstract class LedgerDatabase : RoomDatabase() {
 
         val MIGRATION_9_10 = Migration(9, 10) { db ->
             db.execSQL("ALTER TABLE records DROP COLUMN excludeFromBudget")
+        }
+
+        val MIGRATION_10_11 = Migration(10, 11) { db ->
+            // 清理因跨设备 UUID 不一致导致同步合并产生的重复类别行
+            // 同一 (name, parentName, isIncome) 组内保留 id 最小的，软删除其余
+            db.execSQL("""
+                UPDATE categories SET deleted = 1, updatedAt = ${System.currentTimeMillis()}
+                WHERE id NOT IN (
+                    SELECT MIN(id) FROM categories
+                    WHERE deleted = 0
+                    GROUP BY name, IFNULL(parentName, ''), isIncome
+                )
+                AND deleted = 0
+            """)
         }
     }
 }

@@ -47,4 +47,7 @@ interface CategoryDao {
 
     @Query("SELECT * FROM categories WHERE syncUuid = :syncUuid LIMIT 1")
     suspend fun getCategoryBySyncUuid(syncUuid: String): Category?
+
+    @Query("SELECT * FROM categories WHERE id = :id LIMIT 1")
+    suspend fun getCategoryById(id: Long): Category?
 }

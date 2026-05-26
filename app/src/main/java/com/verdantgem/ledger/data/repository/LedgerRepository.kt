@@ -221,9 +221,13 @@ class LedgerRepository @Inject constructor(
 
     suspend fun insertRecordForSync(record: Record) {
         val effectiveSyncUuid = record.syncUuid.ifBlank { java.util.UUID.randomUUID().toString() }
-        val existing = recordDao.getRecordBySyncUuid(effectiveSyncUuid)
+        var existing = recordDao.getRecordBySyncUuid(effectiveSyncUuid)
+        // 回退：如果 UUID 找不到但 id 有效，按 id 查找（处理跨设备 UUID 不一致）
+        if (existing == null && record.id > 0) {
+            existing = recordDao.getRecordById(record.id)
+        }
         if (existing != null) {
-            // 本地已有相同 syncUuid 的记录，用远程数据覆盖但保留本地 id
+            // 本地已有记录，用远程数据覆盖但保留本地 id，收敛 UUID 为远程值
             recordDao.insertRecord(record.copy(id = existing.id, syncUuid = effectiveSyncUuid))
         } else {
             // 新记录，让 Room 自增 id
@@ -233,8 +237,13 @@ class LedgerRepository @Inject constructor(
 
     suspend fun upsertCategoryForSync(category: Category) {
         val effectiveSyncUuid = category.syncUuid.ifBlank { java.util.UUID.randomUUID().toString() }
-        val existing = categoryDao.getCategoryBySyncUuid(effectiveSyncUuid)
+        var existing = categoryDao.getCategoryBySyncUuid(effectiveSyncUuid)
+        // 回退：如果 UUID 找不到但 id 有效，按 id 查找（处理跨设备 UUID 不一致）
+        if (existing == null && category.id > 0) {
+            existing = categoryDao.getCategoryById(category.id)
+        }
         if (existing != null) {
+            // 更新已有记录，收敛 UUID 为远程值
             categoryDao.upsertCategory(category.copy(id = existing.id, syncUuid = effectiveSyncUuid))
         } else {
             categoryDao.upsertCategory(category.copy(id = 0, syncUuid = effectiveSyncUuid))

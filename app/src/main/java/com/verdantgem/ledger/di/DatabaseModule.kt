@@ -34,7 +34,8 @@ object DatabaseModule {
             LedgerDatabase.MIGRATION_6_7,
             LedgerDatabase.MIGRATION_7_8,
             LedgerDatabase.MIGRATION_8_9,
-            LedgerDatabase.MIGRATION_9_10
+            LedgerDatabase.MIGRATION_9_10,
+            LedgerDatabase.MIGRATION_10_11
         ).build()
     }
 
