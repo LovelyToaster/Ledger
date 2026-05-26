@@ -50,4 +50,14 @@ interface CategoryDao {
 
     @Query("SELECT * FROM categories WHERE id = :id LIMIT 1")
     suspend fun getCategoryById(id: Long): Category?
+
+    @Query("""
+        SELECT * FROM categories
+        WHERE name = :name
+          AND IFNULL(parentName, '') = IFNULL(:parentName, '')
+          AND isIncome = :isIncome
+          AND deleted = 0
+        LIMIT 1
+    """)
+    suspend fun getCategoryByNameAndParent(name: String, parentName: String?, isIncome: Boolean): Category?
 }

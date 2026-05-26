@@ -242,6 +242,10 @@ class LedgerRepository @Inject constructor(
         if (existing == null && category.id > 0) {
             existing = categoryDao.getCategoryById(category.id)
         }
+        // 第三回退：按 (name, parentName, isIncome) 语义匹配（处理重置类别后 ID 漂移）
+        if (existing == null) {
+            existing = categoryDao.getCategoryByNameAndParent(category.name, category.parentName, category.isIncome)
+        }
         if (existing != null) {
             // 更新已有记录，收敛 UUID 为远程值
             categoryDao.upsertCategory(category.copy(id = existing.id, syncUuid = effectiveSyncUuid))

@@ -313,6 +313,15 @@ class SyncManager @Inject constructor(
         val allCategories = repository.getAllCategoriesForSync()
         val localCategoriesByUuid = allCategories.associateBy { it.syncUuid }
         val localCategoriesById = allCategories.associateBy { it.id }
+        // 语义匹配 Map：按 (name, parentName, isIncome) 索引，优先保留 active 行
+        val localCategoriesByKey = mutableMapOf<Triple<String, String?, Boolean>, com.verdantgem.ledger.data.model.Category>()
+        for (cat in allCategories) {
+            val key = Triple(cat.name, cat.parentName, cat.isIncome)
+            val existing = localCategoriesByKey[key]
+            if (existing == null || (existing.deleted && !cat.deleted)) {
+                localCategoriesByKey[key] = cat
+            }
+        }
         val localBudget = repository.getBudgetForSync()
 
         for (remote in snapshot.records) {
@@ -354,6 +363,10 @@ class SyncManager @Inject constructor(
             }
             if (local == null) {
                 local = localCategoriesById[remote.id]
+            }
+            // 第三回退：按 (name, parentName, isIncome) 语义匹配，处理跨设备 ID 漂移
+            if (local == null) {
+                local = localCategoriesByKey[Triple(remote.name, remote.parentName, remote.isIncome)]
             }
 
             if (local == null || remote.updatedAt > local.updatedAt) {
