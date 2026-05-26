@@ -3,9 +3,11 @@ package com.verdantgem.ledger.data.repository
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
+import com.verdantgem.ledger.data.local.BrandMappingDao
 import com.verdantgem.ledger.data.local.BudgetDao
 import com.verdantgem.ledger.data.local.CategoryDao
 import com.verdantgem.ledger.data.local.RecordDao
+import com.verdantgem.ledger.data.model.BrandMapping
 import com.verdantgem.ledger.data.model.Budget
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
@@ -21,10 +23,12 @@ class LedgerRepository @Inject constructor(
     private val recordDao: RecordDao,
     private val categoryDao: CategoryDao,
     private val budgetDao: BudgetDao,
+    private val brandMappingDao: BrandMappingDao,
     private val changeNotifier: DataChangeNotifier
 ) {
     val allRecords: Flow<List<Record>> = recordDao.getAllRecords()
     val allCategories: Flow<List<Category>> = categoryDao.getAllCategories()
+    val allBrandMappings: Flow<List<BrandMapping>> = brandMappingDao.getAllMappings()
 
     val totalExpenseFlow: Flow<Double> = recordDao.getTotalExpenseFlow()
     val totalIncomeFlow: Flow<Double> = recordDao.getTotalIncomeFlow()
@@ -121,11 +125,6 @@ class LedgerRepository @Inject constructor(
         changeNotifier.notifyChange()
     }
 
-    suspend fun updateRecordExcludeFromBudget(id: Long, exclude: Boolean) {
-        recordDao.updateRecordExcludeFromBudget(id, exclude)
-        changeNotifier.notifyChange()
-    }
-
     suspend fun updateRecordAmount(id: Long, amount: Double) {
         recordDao.updateRecordAmount(id, amount)
         changeNotifier.notifyChange()
@@ -164,6 +163,50 @@ class LedgerRepository @Inject constructor(
     suspend fun seedDefaultCategories() {
         if (categoryDao.getCategoryCount() > 0) return
         categoryDao.insertCategories(DefaultCategories.getAll())
+        seedBrandMappings()
+    }
+
+    /**
+     * 种子品牌映射数据（仅当 brand_mappings 表为空时执行）
+     * 根据 BrandSeedData 中的分类名查找 ID 后写入
+     */
+    suspend fun seedBrandMappings() {
+        if (brandMappingDao.getCount() > 0) return
+        val categories = categoryDao.getAllCategoriesList()
+        val mappings = BrandSeedData.getAll().mapNotNull { (brandName, categoryName) ->
+            val cat = categories.firstOrNull { it.name == categoryName }
+            if (cat != null) {
+                BrandMapping(
+                    brandName = brandName,
+                    categoryId = cat.id,
+                    source = "default"
+                )
+            } else null
+        }
+        if (mappings.isNotEmpty()) {
+            brandMappingDao.insertAll(mappings)
+        }
+    }
+
+    /**
+     * 用户自学习：记录未知品牌→分类的映射
+     * @param brandName 品牌名/备注文本
+     * @param categoryId 用户选择的分组 ID
+     */
+    suspend fun learnBrandMapping(brandName: String, categoryId: Long) {
+        val existing = brandMappingDao.getByBrandName(brandName)
+        if (existing != null) {
+            brandMappingDao.upsert(existing.copy(
+                hitCount = existing.hitCount + 1,
+                updatedAt = System.currentTimeMillis()
+            ))
+        } else {
+            brandMappingDao.upsert(BrandMapping(
+                brandName = brandName,
+                categoryId = categoryId,
+                source = "user"
+            ))
+        }
     }
 
     suspend fun resetToDefaultCategories() {

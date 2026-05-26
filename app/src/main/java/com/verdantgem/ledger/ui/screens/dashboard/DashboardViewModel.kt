@@ -6,6 +6,7 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import androidx.paging.insertSeparators
 import androidx.paging.map
+import com.verdantgem.ledger.data.model.BrandMapping
 import com.verdantgem.ledger.data.model.Budget
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
@@ -123,6 +124,9 @@ class DashboardViewModel @Inject constructor(
     val allCategories: StateFlow<List<Category>> = repository.allCategories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allBrandMappings: StateFlow<List<BrandMapping>> = repository.allBrandMappings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val dailyAggregates: StateFlow<Map<String, DailyAggregateItem>> = combine(
         repository.allRecords, repository.allCategories
     ) { records, categories ->
@@ -201,6 +205,15 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             locationDelegate.joinLocation()
             repository.quickRecord(text, categoryName, isIncome, locationDelegate.address, billDate)
+        }
+    }
+
+    fun learnBrandMapping(brandName: String, categoryName: String) {
+        viewModelScope.launch {
+            val cat = repository.getAllCategoriesList().firstOrNull { it.name == categoryName }
+            if (cat != null) {
+                repository.learnBrandMapping(brandName, cat.id)
+            }
         }
     }
 

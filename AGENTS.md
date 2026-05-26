@@ -2,9 +2,9 @@
 
 ## 项目信息
 - 包名：`com.verdantgem.ledger`
-- 当前版本：1.3.3（versionCode = 7）
+- 当前版本：1.4.1（versionCode = 10）
 - 技术栈：Kotlin + Jetpack Compose + Hilt + Room + Paging 3 + OkHttp + Apache POI (XLS)
-- 最低 SDK：26 (Android 8.0)
+- 最低 SDK：34 (Android 14)
 - 目标 SDK：36 (Android 16)
 
 ## 构建命令
@@ -18,7 +18,7 @@
 - **定位服务**：`LocationProvider`（Hilt `@Singleton`），`getAddress()` 每次调用创建/销毁 `AMapLocationClient`，`finally` 中确保 `onDestroy()` 释放系统连接
 - **生命周期**：进入记账界面 → `startLocation()` → 定位完成自动 `onDestroy()`；退出界面 → `DisposableEffect.onDispose` / `onCleared` → `stopLocation()` 取消 job；保存前 `locationJob?.join()` 等待定位完成
 - **防重复**：`startLocation()` 有双重 guard — 已有有效地址不重复获取，已有正在执行的 job 不重复启动
-- **数据库版本**：v7（`MIGRATION_4_5` 新增 `updatedAt`、`deleted` 字段；`MIGRATION_5_6` 新增 `excludeFromBudget` 字段；`MIGRATION_6_7` 新增 `syncUuid` 全局唯一标识字段）
+- **数据库版本**：v10（`MIGRATION_4_5` 新增 `updatedAt`、`deleted` 字段；`MIGRATION_5_6` 新增 `excludeFromBudget` 字段；`MIGRATION_6_7` 新增 `syncUuid` 全局唯一标识字段；`MIGRATION_7_8` 新增 `brand_mappings` 品牌映射表；`MIGRATION_8_9` 修复索引名；`MIGRATION_9_10` 移除 `excludeFromBudget` 列）
 - **RecordDetailScreen**：仍然显示已保存的 `Record.address` 字段（若有）；支持编辑金额/备注/类别/不计入预算开关
 
 ## 预算功能

@@ -4,15 +4,17 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.verdantgem.ledger.data.model.BrandMapping
 import com.verdantgem.ledger.data.model.Budget
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
 
-@Database(entities = [Category::class, Record::class, Budget::class], version = 7, exportSchema = false)
+@Database(entities = [Category::class, Record::class, Budget::class, BrandMapping::class], version = 10, exportSchema = false)
 abstract class LedgerDatabase : RoomDatabase() {
     abstract fun recordDao(): RecordDao
     abstract fun categoryDao(): CategoryDao
     abstract fun budgetDao(): BudgetDao
+    abstract fun brandMappingDao(): BrandMappingDao
 
     companion object {
         const val DATABASE_NAME = "ledger_db"
@@ -46,6 +48,31 @@ abstract class LedgerDatabase : RoomDatabase() {
             db.execSQL("ALTER TABLE categories ADD COLUMN syncUuid TEXT NOT NULL DEFAULT ''")
             db.execSQL("ALTER TABLE budgets ADD COLUMN syncUuid TEXT NOT NULL DEFAULT ''")
             // 不在此处生成 UUID：由首次同步推送的设备统一生成，确保跨设备 UUID 一致
+        }
+
+        val MIGRATION_7_8 = Migration(7, 8) { db ->
+            db.execSQL("""
+                CREATE TABLE brand_mappings (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    brandName TEXT NOT NULL,
+                    categoryId INTEGER NOT NULL,
+                    source TEXT NOT NULL DEFAULT 'default',
+                    hitCount INTEGER NOT NULL DEFAULT 0,
+                    updatedAt INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_brand_mappings_brandName` ON brand_mappings(`brandName`)")
+        }
+
+        val MIGRATION_8_9 = Migration(8, 9) { db ->
+            // 修复 v8 中索引名与 Room 实体注解不匹配的 bug
+            db.execSQL("DROP INDEX IF EXISTS idx_brand_mappings_name")
+            db.execSQL("DROP INDEX IF EXISTS `index_brand_mappings_brandName`")
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_brand_mappings_brandName` ON brand_mappings(`brandName`)")
+        }
+
+        val MIGRATION_9_10 = Migration(9, 10) { db ->
+            db.execSQL("ALTER TABLE records DROP COLUMN excludeFromBudget")
         }
     }
 }

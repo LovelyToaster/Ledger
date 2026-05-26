@@ -110,13 +110,6 @@ class RecordDetailViewModel @Inject constructor(
         }
     }
 
-    fun toggleExcludeFromBudget(exclude: Boolean) {
-        viewModelScope.launch {
-            repository.updateRecordExcludeFromBudget(currentRecordId, exclude)
-            _record.value = repository.getRecordById(currentRecordId)
-        }
-    }
-
     fun updateAmount(newAmount: Double) {
         viewModelScope.launch {
             repository.updateRecordAmount(currentRecordId, newAmount)
@@ -287,36 +280,6 @@ fun RecordDetailScreen(
                                 )
                             }
                         }
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), thickness = 0.5.dp)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.NotInterested,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "不计入预算",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "开启后该账单不计入月度预算统计",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                            }
-                            Switch(
-                                checked = currentRecord.excludeFromBudget,
-                                onCheckedChange = { viewModel.toggleExcludeFromBudget(it) }
-                            )
-        }
     }
 
     if (showAmountEditDialog && currentRecord != null) {

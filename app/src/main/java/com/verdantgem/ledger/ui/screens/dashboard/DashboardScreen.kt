@@ -13,9 +13,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -42,9 +39,11 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
+import com.verdantgem.ledger.data.model.BrandMapping
 import com.verdantgem.ledger.data.model.Budget
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
+import com.verdantgem.ledger.domain.matcher.BrandMatcher
 import com.verdantgem.ledger.domain.parser.SmartParser
 import com.verdantgem.ledger.ui.components.DateTimePickerDialog
 import com.verdantgem.ledger.ui.components.QuickCategoryPicker
@@ -67,6 +66,7 @@ fun DashboardScreen(
     val isSelectionMode by viewModel.isSelectionMode.collectAsState()
     val selectedIds by viewModel.selectedIds.collectAsState()
     val allCategories by viewModel.allCategories.collectAsState()
+    val allBrandMappings by viewModel.allBrandMappings.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val dailyAggregates by viewModel.dailyAggregates.collectAsState()
     val d = MaterialTheme.dimens
@@ -339,10 +339,14 @@ fun DashboardScreen(
                     onDismiss = { isSheetOpen = false },
                     focusRequester = focusRequester,
                     categories = allCategories,
+                    brandMappings = allBrandMappings,
                     selectedCategory = quickCategoryName,
                     onCategoryChange = { quickCategoryName = it },
                     billDate = quickBillDate,
                     onDateClick = { showDatePicker = true },
+                    onLearnBrand = { brandName, categoryName ->
+                        viewModel.learnBrandMapping(brandName, categoryName)
+                    },
                 )
             }
         }
@@ -366,10 +370,12 @@ private fun QuickRecordOverlay(
     onDismiss: () -> Unit,
     focusRequester: FocusRequester,
     categories: List<Category>,
+    brandMappings: List<BrandMapping>,
     selectedCategory: String,
     onCategoryChange: (String) -> Unit,
     billDate: Long,
     onDateClick: () -> Unit,
+    onLearnBrand: (brandName: String, categoryName: String) -> Unit = { _, _ -> },
 ) {
     val d = MaterialTheme.dimens
     var showCategoryPicker by remember { mutableStateOf(false) }
@@ -377,25 +383,12 @@ private fun QuickRecordOverlay(
     val parsedNote = parseResult?.note?.takeIf { it != "未命名支出" }
     val parsedAmount = parseResult?.amount
 
-    val matchedCategory = remember(parsedNote, categories) {
+    val matchedCategory = remember(parsedNote, categories, brandMappings) {
         parsedNote?.let { note ->
-            fun matchIn(list: List<Category>): Category? {
-                val exact = list.firstOrNull { it.name == note }
-                if (exact != null) return exact
-                val promptExact = list.firstOrNull {
-                    it.prompts.split(",", "，").any { p -> p.trim() == note }
-                }
-                if (promptExact != null) return promptExact
-                val promptContain = list.firstOrNull {
-                    it.prompts.split(",", "，").any { p -> note.contains(p.trim()) || p.trim().contains(note) }
-                }
-                if (promptContain != null) return promptContain
-                return list.firstOrNull { note.contains(it.name) || it.name.contains(note) }
-            }
             val incomeCats = categories.filter { it.isIncome }
             val expenseCats = categories.filter { !it.isIncome }
-            val incomeMatch = matchIn(incomeCats)
-            val expenseMatch = matchIn(expenseCats)
+            val incomeMatch = BrandMatcher.matchNote(note, incomeCats, brandMappings)
+            val expenseMatch = BrandMatcher.matchNote(note, expenseCats, brandMappings)
             when {
                 incomeMatch != null && expenseMatch != null -> {
                     if (incomeMatch.name == note || incomeMatch.prompts.contains(note)) incomeMatch
@@ -462,6 +455,13 @@ private fun QuickRecordOverlay(
                         onTextChange = onTextChange,
                         onSend = {
                             val finalCategory = selectedCategory.ifBlank { matchedCategory?.name }
+                            // 用户自学习：手动选择分类时记录品牌映射
+                            if (selectedCategory.isNotBlank() && parsedNote != null && parsedNote.length >= 2) {
+                                val autoMatched = matchedCategory?.name
+                                if (autoMatched != selectedCategory) {
+                                    onLearnBrand(parsedNote, selectedCategory)
+                                }
+                            }
                             onSend(finalCategory, isIncomeCat, billDate)
                         },
                         onExpand = onExpand,
@@ -723,7 +723,6 @@ fun RecordItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val excludeColor = Color(0xFFFFA726)
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -731,20 +730,6 @@ fun RecordItem(
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
-            )
-            .then(
-                if (record.excludeFromBudget) {
-                    Modifier.drawWithContent {
-                        drawContent()
-                        drawRect(
-                            color = excludeColor,
-                            topLeft = Offset.Zero,
-                            size = Size(3.dp.toPx(), size.height)
-                        )
-                    }
-                } else {
-                    Modifier
-                }
             ),
         shape = RoundedCornerShape(16.dp),
         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer

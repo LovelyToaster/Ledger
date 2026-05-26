@@ -2,6 +2,7 @@ package com.verdantgem.ledger.di
 
 import android.content.Context
 import androidx.room.Room
+import com.verdantgem.ledger.data.local.BrandMappingDao
 import com.verdantgem.ledger.data.local.BudgetDao
 import com.verdantgem.ledger.data.local.CategoryDao
 import com.verdantgem.ledger.data.local.LedgerDatabase
@@ -30,7 +31,10 @@ object DatabaseModule {
             LedgerDatabase.MIGRATION_3_4,
             LedgerDatabase.MIGRATION_4_5,
             LedgerDatabase.MIGRATION_5_6,
-            LedgerDatabase.MIGRATION_6_7
+            LedgerDatabase.MIGRATION_6_7,
+            LedgerDatabase.MIGRATION_7_8,
+            LedgerDatabase.MIGRATION_8_9,
+            LedgerDatabase.MIGRATION_9_10
         ).build()
     }
 
@@ -47,5 +51,10 @@ object DatabaseModule {
     @Provides
     fun provideBudgetDao(database: LedgerDatabase): BudgetDao {
         return database.budgetDao()
+    }
+
+    @Provides
+    fun provideBrandMappingDao(database: LedgerDatabase): BrandMappingDao {
+        return database.brandMappingDao()
     }
 }

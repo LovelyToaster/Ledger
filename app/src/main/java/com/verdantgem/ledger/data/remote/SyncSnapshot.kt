@@ -35,7 +35,6 @@ data class SyncRecord(
     @SerialName("createdAt") val createdAt: Long,
     @SerialName("updatedAt") val updatedAt: Long,
     @SerialName("deleted") val deleted: Boolean = false,
-    @SerialName("exf") val excludeFromBudget: Boolean = false,
     @SerialName("address") val address: String = "",
     @SerialName("latitude") val latitude: Double? = null,
     @SerialName("longitude") val longitude: Double? = null
@@ -67,7 +66,6 @@ fun SyncRecord.toRecord() = com.verdantgem.ledger.data.model.Record(
     id = id, syncUuid = syncUuid, amount = amount, categoryId = categoryId,
     categoryName = categoryName, note = note, date = date,
     createdAt = createdAt, updatedAt = updatedAt, deleted = deleted,
-    excludeFromBudget = excludeFromBudget,
     address = address, latitude = latitude, longitude = longitude
 )
 
@@ -75,7 +73,6 @@ fun com.verdantgem.ledger.data.model.Record.toSync() = SyncRecord(
     id = id, syncUuid = syncUuid, amount = amount, categoryId = categoryId,
     categoryName = categoryName, note = note, date = date,
     createdAt = createdAt, updatedAt = updatedAt, deleted = deleted,
-    excludeFromBudget = excludeFromBudget,
     address = address, latitude = latitude, longitude = longitude
 )
 

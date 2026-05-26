@@ -14,10 +14,10 @@ android {
 
     defaultConfig {
         applicationId = "com.verdantgem.ledger"
-        minSdk = 26
+        minSdk = 34
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.3.3"
+        versionCode = 10
+        versionName = "1.4.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

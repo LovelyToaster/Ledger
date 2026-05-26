@@ -2,6 +2,7 @@ package com.verdantgem.ledger.ui.screens.record
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.verdantgem.ledger.data.model.BrandMapping
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.remote.AddressResult
 import com.verdantgem.ledger.data.remote.LocationDelegate
@@ -23,6 +24,9 @@ class CategoryViewModel @Inject constructor(
     private val locationDelegate = LocationDelegate(locationProvider)
 
     val allCategories: StateFlow<List<Category>> = repository.allCategories
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allBrandMappings: StateFlow<List<BrandMapping>> = repository.allBrandMappings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun startLocation() = locationDelegate.startLocation(viewModelScope)
@@ -50,6 +54,15 @@ class CategoryViewModel @Inject constructor(
     fun resetToDefault() {
         viewModelScope.launch {
             repository.resetToDefaultCategories()
+        }
+    }
+
+    fun learnBrandMapping(brandName: String, categoryName: String) {
+        viewModelScope.launch {
+            val cat = repository.getAllCategoriesList().firstOrNull { it.name == categoryName }
+            if (cat != null) {
+                repository.learnBrandMapping(brandName, cat.id)
+            }
         }
     }
 

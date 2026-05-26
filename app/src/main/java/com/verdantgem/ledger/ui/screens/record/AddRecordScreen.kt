@@ -37,7 +37,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.verdantgem.ledger.data.model.BrandMapping
 import com.verdantgem.ledger.data.model.Category
+import com.verdantgem.ledger.domain.matcher.BrandMatcher
 import com.verdantgem.ledger.ui.components.DateTimePickerDialog
 
 import com.verdantgem.ledger.ui.theme.WindowWidth
@@ -52,6 +54,7 @@ fun AddRecordScreen(
     viewModel: CategoryViewModel = hiltViewModel()
 ) {
     val allCategories by viewModel.allCategories.collectAsState()
+    val allBrandMappings by viewModel.allBrandMappings.collectAsState()
     val d = MaterialTheme.dimens
     val windowSize = MaterialTheme.windowSize
     val gridColumns = when (windowSize.width) {
@@ -96,25 +99,12 @@ fun AddRecordScreen(
     var billDate by remember { mutableStateOf(System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
     var userTouchedCategory by remember { mutableStateOf(false) }
-    val noteMatchedCategory = remember(note, allCategories) {
+    val noteMatchedCategory = remember(note, allCategories, allBrandMappings) {
         val parsedNote = note.trim().takeIf { it.isNotEmpty() } ?: return@remember null
-        fun matchIn(list: List<Category>): Category? {
-            val exact = list.firstOrNull { it.name == parsedNote }
-            if (exact != null) return exact
-            val promptExact = list.firstOrNull {
-                it.prompts.split(",", "，").any { p -> p.trim() == parsedNote }
-            }
-            if (promptExact != null) return promptExact
-            val promptContain = list.firstOrNull {
-                it.prompts.split(",", "，").any { p -> parsedNote.contains(p.trim()) || p.trim().contains(parsedNote) }
-            }
-            if (promptContain != null) return promptContain
-            return list.firstOrNull { parsedNote.contains(it.name) || it.name.contains(parsedNote) }
-        }
         val incomeCats = allCategories.filter { it.isIncome }
         val expenseCats = allCategories.filter { !it.isIncome }
-        val incomeMatch = matchIn(incomeCats)
-        val expenseMatch = matchIn(expenseCats)
+        val incomeMatch = BrandMatcher.matchNote(parsedNote, incomeCats, allBrandMappings)
+        val expenseMatch = BrandMatcher.matchNote(parsedNote, expenseCats, allBrandMappings)
         val note2 = parsedNote
         when {
             incomeMatch != null && expenseMatch != null -> {
@@ -155,7 +145,17 @@ fun AddRecordScreen(
                 isIncome = isIncome,
                 billDate = billDate
             )
-            if (success) onBack()
+            if (success) {
+                // 用户自学习：手动选择分类时记录品牌映射
+                val trimmedNote = note.trim()
+                if (trimmedNote.length >= 2 && selectedSub.isNotEmpty()) {
+                    val autoMatched = noteMatchedCategory?.name
+                    if (autoMatched != selectedSub) {
+                        viewModel.learnBrandMapping(trimmedNote, selectedSub)
+                    }
+                }
+                onBack()
+            }
         }
     }
 
