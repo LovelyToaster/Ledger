@@ -26,21 +26,28 @@ object SmartParser {
         val trimmedInput = input.trim()
         val matcher = AMOUNT_REGEX.matcher(trimmedInput)
 
-        return if (matcher.find()) {
-            val amountStr = matcher.group(1)
-            val amount = amountStr?.toDoubleOrNull() ?: return null
-
-            // 提取金额之外的部分作为备注
-            // 例如 "打水0.01" -> "打水"
-            val note = trimmedInput.replace(amountStr, "").trim()
-
-            ParseResult(
-                amount = amount,
-                note = if (note.isEmpty()) "未命名支出" else note,
-                rawText = trimmedInput
-            )
-        } else {
-            null
+        // 查找所有数字，取最后一个作为金额
+        // 例如 "S5 700" → 最后一个"700"是金额，"S5"是备注
+        var amountStr: String? = null
+        var lastStart = -1
+        var lastEnd = -1
+        while (matcher.find()) {
+            amountStr = matcher.group(1)
+            lastStart = matcher.start()
+            lastEnd = matcher.end()
         }
+
+        if (amountStr == null) return null
+        val amount = amountStr.toDoubleOrNull() ?: return null
+
+        // 精确移除最后一个数字的位置（避免误删其他同名数字）
+        val note = (trimmedInput.substring(0, lastStart) +
+                    trimmedInput.substring(lastEnd)).trim()
+
+        return ParseResult(
+            amount = amount,
+            note = note.ifEmpty { "未命名支出" },
+            rawText = trimmedInput
+        )
     }
 }
