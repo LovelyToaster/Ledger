@@ -16,6 +16,21 @@ interface RecordDao {
     @Query("SELECT * FROM records WHERE deleted = 0 AND (note LIKE '%' || :query || '%' OR categoryName LIKE '%' || :query || '%') ORDER BY date DESC")
     fun getSearchPagingSource(query: String): PagingSource<Int, Record>
 
+    @Query("SELECT * FROM records WHERE deleted = 0 AND (note LIKE '%' || :query || '%' OR categoryName LIKE '%' || :query || '%') AND date >= :startTime AND date <= :endTime ORDER BY date DESC")
+    fun getSearchWithDateRangePagingSource(query: String, startTime: Long, endTime: Long): PagingSource<Int, Record>
+
+    @Query("SELECT * FROM records WHERE deleted = 0 AND date >= :startTime AND date <= :endTime ORDER BY date DESC")
+    fun getRecordsInDateRange(startTime: Long, endTime: Long): PagingSource<Int, Record>
+
+    @Query("SELECT * FROM records WHERE deleted = 0 AND categoryName = :categoryName AND date >= :startTime AND date <= :endTime ORDER BY date DESC")
+    fun getRecordsByCategoryPagingSource(categoryName: String, startTime: Long, endTime: Long): PagingSource<Int, Record>
+
+    @Query("SELECT * FROM records WHERE deleted = 0 AND (note LIKE '%' || :query || '%' OR categoryName LIKE '%' || :query || '%') AND categoryName = :categoryName AND date >= :startTime AND date <= :endTime ORDER BY date DESC")
+    fun getSearchWithCategoryAndDateRangePagingSource(query: String, categoryName: String, startTime: Long, endTime: Long): PagingSource<Int, Record>
+
+    @Query("SELECT * FROM records WHERE deleted = 0 AND categoryName IN (SELECT name FROM categories WHERE parentName = :parentName AND isIncome = :isIncome) AND date >= :startTime AND date <= :endTime ORDER BY date DESC")
+    fun getRecordsByParentCategoryPagingSource(parentName: String, isIncome: Boolean, startTime: Long, endTime: Long): PagingSource<Int, Record>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRecord(record: Record): Long
 

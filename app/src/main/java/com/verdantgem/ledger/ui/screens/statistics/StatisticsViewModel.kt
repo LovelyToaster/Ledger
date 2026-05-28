@@ -388,6 +388,20 @@ class StatisticsViewModel @Inject constructor(
         _selectedDate.value = newDate
     }
 
+    private var skipNextReset = false
+
+    fun skipNextReset() {
+        skipNextReset = true
+    }
+
+    fun resetToDefaultIfNeeded() {
+        if (skipNextReset) {
+            skipNextReset = false
+            return
+        }
+        resetToDefault()
+    }
+
     fun resetToDefault() {
         _mode.value = StatsMode.RECENT
         _isCategoryIncome.value = false

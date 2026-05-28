@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import android.content.pm.PackageManager
@@ -46,11 +47,14 @@ import com.verdantgem.ledger.data.model.Record
 import com.verdantgem.ledger.domain.matcher.BrandMatcher
 import com.verdantgem.ledger.domain.parser.SmartParser
 import com.verdantgem.ledger.ui.components.DateTimePickerDialog
+import com.verdantgem.ledger.ui.components.PickerCategoryItem
 import com.verdantgem.ledger.ui.components.QuickCategoryPicker
 import com.verdantgem.ledger.ui.theme.dimens
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.YearMonth
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,6 +82,10 @@ fun DashboardScreen(
     var quickBillDate by remember { mutableStateOf(System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
+    val searchStartTime by viewModel.searchStartTime.collectAsState()
+    val searchEndTime by viewModel.searchEndTime.collectAsState()
+    val selectedSearchCategory by viewModel.selectedSearchCategory.collectAsState()
+    var showAdvancedSearch by remember { mutableStateOf(false) }
 
     // 快速记账弹窗打开时重置账单时间为当前时间
     LaunchedEffect(isSheetOpen) {
@@ -97,6 +105,7 @@ fun DashboardScreen(
     BackHandler(enabled = isSearchExpanded) {
         isSearchExpanded = false
         viewModel.setSearchQuery("")
+        viewModel.clearAdvancedSearch()
     }
     BackHandler(enabled = isSelectionMode) {
         viewModel.exitSelectionMode()
@@ -152,8 +161,14 @@ fun DashboardScreen(
                             IconButton(onClick = { 
                                 isSearchExpanded = false
                                 viewModel.setSearchQuery("")
+                                viewModel.clearAdvancedSearch()
                             }) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = { showAdvancedSearch = true }) {
+                                Icon(Icons.Default.Tune, contentDescription = "高级搜索")
                             }
                         }
                     )
@@ -358,6 +373,295 @@ fun DashboardScreen(
             onConfirm = { quickBillDate = it; showDatePicker = false },
             onDismiss = { showDatePicker = false }
         )
+    }
+
+    if (showAdvancedSearch) {
+        AdvancedSearchDialog(
+            allCategories = allCategories,
+            currentQuery = searchQuery,
+            currentStartTime = searchStartTime,
+            currentEndTime = searchEndTime,
+            currentCategoryName = selectedSearchCategory,
+            onApply = { query, start, end, categoryName ->
+                viewModel.setSearchQuery(query)
+                viewModel.setSearchDateRange(start, end)
+                viewModel.setSearchCategory(categoryName)
+                showAdvancedSearch = false
+            },
+            onClear = {
+                viewModel.setSearchQuery("")
+                viewModel.clearAdvancedSearch()
+                showAdvancedSearch = false
+            },
+            onDismiss = { showAdvancedSearch = false }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AdvancedSearchDialog(
+    allCategories: List<Category>,
+    currentQuery: String,
+    currentStartTime: Long?,
+    currentEndTime: Long?,
+    currentCategoryName: String?,
+    onApply: (query: String, startTime: Long?, endTime: Long?, categoryName: String?) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var query by remember { mutableStateOf(currentQuery) }
+    var startTime by remember { mutableStateOf(currentStartTime) }
+    var endTime by remember { mutableStateOf(currentEndTime) }
+    var categoryName by remember { mutableStateOf(currentCategoryName) }
+    var showStartPicker by remember { mutableStateOf(false) }
+    var showEndPicker by remember { mutableStateOf(false) }
+    var showCategoryPicker by remember { mutableStateOf(false) }
+    val dateFormatter = remember { SimpleDateFormat("MM-dd", Locale.getDefault()) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text("高级搜索", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 类别
+                Text("类别", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+                Spacer(modifier = Modifier.height(4.dp))
+                Surface(
+                    onClick = { showCategoryPicker = !showCategoryPicker },
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (categoryName != null) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (categoryName != null) {
+                                val cat = allCategories.firstOrNull { it.name == categoryName }
+                                if (cat?.parentName != null) "${cat.parentName}-${cat.name}" else categoryName!!
+                            } else "全部",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
+                }
+
+                if (showCategoryPicker) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    GridCategoryPicker(
+                        categories = allCategories,
+                        selectedCategoryName = categoryName,
+                        onCategoryClick = { name ->
+                            categoryName = name
+                            showCategoryPicker = false
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 时间范围
+                Text("时间范围", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Surface(
+                        onClick = { showStartPicker = true },
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (startTime != null) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Text(
+                            text = if (startTime != null) dateFormatter.format(Date(startTime!!)) else "开始日期",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                    Text("-", color = MaterialTheme.colorScheme.outline)
+                    Surface(
+                        onClick = { showEndPicker = true },
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (endTime != null) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Text(
+                            text = if (endTime != null) dateFormatter.format(Date(endTime!!)) else "结束日期",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                    if (startTime != null || endTime != null) {
+                        IconButton(onClick = { startTime = null; endTime = null }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "清除", modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 备注搜索
+                Text("备注", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("搜索备注或类别...") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors()
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 按钮
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = {
+                        onClear()
+                    }, modifier = Modifier.weight(1f)) {
+                        Text("清除筛选")
+                    }
+                    Button(onClick = {
+                        onApply(query, startTime, endTime, categoryName)
+                    }, modifier = Modifier.weight(1f)) {
+                        Text("确定")
+                    }
+                }
+            }
+        }
+    }
+
+    // DatePicker dialogs
+    if (showStartPicker) {
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = startTime ?: System.currentTimeMillis())
+        DatePickerDialog(
+            onDismissRequest = { showStartPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let {
+                        val cal = Calendar.getInstance().apply { timeInMillis = it
+                            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+                        startTime = cal.timeInMillis
+                    }
+                    showStartPicker = false
+                }) { Text("确定") }
+            },
+            dismissButton = { TextButton(onClick = { showStartPicker = false }) { Text("取消") } }
+        ) { DatePicker(state = pickerState) }
+    }
+
+    if (showEndPicker) {
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = endTime ?: System.currentTimeMillis())
+        DatePickerDialog(
+            onDismissRequest = { showEndPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let {
+                        val cal = Calendar.getInstance().apply { timeInMillis = it
+                            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59); set(Calendar.MILLISECOND, 999) }
+                        endTime = cal.timeInMillis
+                    }
+                    showEndPicker = false
+                }) { Text("确定") }
+            },
+            dismissButton = { TextButton(onClick = { showEndPicker = false }) { Text("取消") } }
+        ) { DatePicker(state = pickerState) }
+    }
+}
+
+@Composable
+private fun GridCategoryPicker(
+    categories: List<Category>,
+    selectedCategoryName: String?,
+    onCategoryClick: (String) -> Unit
+) {
+    var pickerIsIncome by remember { mutableStateOf(false) }
+    val parents = categories.filter { it.isIncome == pickerIsIncome && it.parentName == null }
+    val gridColumns = 4
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = !pickerIsIncome,
+                onClick = { pickerIsIncome = false },
+                label = { Text("支出") },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = pickerIsIncome,
+                onClick = { pickerIsIncome = true },
+                label = { Text("收入") },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 250.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            parents.forEach { parent ->
+                val subs = categories.filter { it.parentName == parent.name }
+
+                Text(
+                    text = parent.name,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
+                )
+
+                if (subs.isNotEmpty()) {
+                    subs.chunked(gridColumns).forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            row.forEach { sub ->
+                                Box(modifier = Modifier.weight(1f)) {
+                                    PickerCategoryItem(
+                                        label = sub.name,
+                                        isSelected = selectedCategoryName == sub.name,
+                                        onClick = { onCategoryClick(sub.name) }
+                                    )
+                                }
+                            }
+                            repeat(gridColumns - row.size) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            PickerCategoryItem(
+                                label = parent.name,
+                                isSelected = selectedCategoryName == parent.name,
+                                onClick = { onCategoryClick(parent.name) }
+                            )
+                        }
+                        repeat(gridColumns - 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -36,6 +36,8 @@ import com.verdantgem.ledger.ui.theme.ThemeMode
 import androidx.hilt.navigation.compose.hiltViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import com.verdantgem.ledger.ui.AppTransitions
+import com.verdantgem.ledger.ui.screens.statistics.CategoryRecordsScreen
+import java.net.URLEncoder
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -153,7 +155,12 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("statistics") { 
                             Box(modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())) {
-                                com.verdantgem.ledger.ui.screens.statistics.StatisticsScreen() 
+                                com.verdantgem.ledger.ui.screens.statistics.StatisticsScreen(
+                                    onNavigateToCategoryRecords = { name, isParent, start, end, isIncome ->
+                                        val encodedName = URLEncoder.encode(name, "UTF-8")
+                                        navController.navigate("category_records/$encodedName/$isParent/$start/$end/$isIncome")
+                                    }
+                                )
                             }
                         }
                         composable("about") {
@@ -193,6 +200,23 @@ class MainActivity : ComponentActivity() {
                         composable("budget_edit") {
                             BudgetEditScreen(
                                 onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable(
+                            "category_records/{categoryName}/{isParent}/{startTime}/{endTime}/{isIncome}",
+                            arguments = listOf(
+                                navArgument("categoryName") { type = NavType.StringType },
+                                navArgument("isParent") { type = NavType.BoolType },
+                                navArgument("startTime") { type = NavType.LongType },
+                                navArgument("endTime") { type = NavType.LongType },
+                                navArgument("isIncome") { type = NavType.BoolType }
+                            )
+                        ) {
+                            CategoryRecordsScreen(
+                                onBack = { navController.popBackStack() },
+                                onNavigateToRecordDetail = { recordId ->
+                                    navController.navigate("record_detail/$recordId")
+                                }
                             )
                         }
                     }

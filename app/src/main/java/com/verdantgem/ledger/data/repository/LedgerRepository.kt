@@ -33,7 +33,12 @@ class LedgerRepository @Inject constructor(
     val totalExpenseFlow: Flow<Double> = recordDao.getTotalExpenseFlow()
     val totalIncomeFlow: Flow<Double> = recordDao.getTotalIncomeFlow()
 
-    fun getRecordsPaged(query: String = ""): Flow<PagingData<Record>> {
+    fun getRecordsPaged(
+        query: String = "",
+        searchStartTime: Long? = null,
+        searchEndTime: Long? = null,
+        searchCategoryName: String? = null
+    ): Flow<PagingData<Record>> {
         return Pager(
             config = PagingConfig(
                 pageSize = 20,
@@ -41,8 +46,28 @@ class LedgerRepository @Inject constructor(
                 enablePlaceholders = false
             ),
             pagingSourceFactory = {
-                if (query.isEmpty()) recordDao.getPagingSource()
-                else recordDao.getSearchPagingSource(query)
+                when {
+                    query.isNotEmpty() && searchCategoryName != null && searchStartTime != null && searchEndTime != null ->
+                        recordDao.getSearchWithCategoryAndDateRangePagingSource(query, searchCategoryName, searchStartTime, searchEndTime)
+                    query.isNotEmpty() && searchStartTime != null && searchEndTime != null ->
+                        recordDao.getSearchWithDateRangePagingSource(query, searchStartTime, searchEndTime)
+                    query.isNotEmpty() ->
+                        recordDao.getSearchPagingSource(query)
+                    searchStartTime != null && searchEndTime != null ->
+                        recordDao.getRecordsInDateRange(searchStartTime, searchEndTime)
+                    else ->
+                        recordDao.getPagingSource()
+                }
+            }
+        ).flow
+    }
+
+    fun getRecordsByCategoryPaged(categoryName: String, isParent: Boolean, isIncome: Boolean, startTime: Long, endTime: Long): Flow<PagingData<Record>> {
+        return Pager(
+            config = PagingConfig(pageSize = 20, initialLoadSize = 20, enablePlaceholders = false),
+            pagingSourceFactory = {
+                if (isParent) recordDao.getRecordsByParentCategoryPagingSource(categoryName, isIncome, startTime, endTime)
+                else recordDao.getRecordsByCategoryPagingSource(categoryName, startTime, endTime)
             }
         ).flow
     }

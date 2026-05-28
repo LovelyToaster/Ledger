@@ -41,6 +41,13 @@ private fun currentMonthEnd(): Long {
     }.timeInMillis
 }
 
+data class AdvancedSearchParams(
+    val query: String = "",
+    val startTime: Long? = null,
+    val endTime: Long? = null,
+    val categoryName: String? = null
+)
+
 data class DailyAggregateItem(val totalIncome: Double, val totalExpense: Double)
 
 sealed class DashboardItem {
@@ -95,6 +102,15 @@ class DashboardViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
 
+    private val _searchStartTime = MutableStateFlow<Long?>(null)
+    val searchStartTime: StateFlow<Long?> = _searchStartTime
+
+    private val _searchEndTime = MutableStateFlow<Long?>(null)
+    val searchEndTime: StateFlow<Long?> = _searchEndTime
+
+    private val _selectedSearchCategory = MutableStateFlow<String?>(null)
+    val selectedSearchCategory: StateFlow<String?> = _selectedSearchCategory
+
     private val _selectedIds = MutableStateFlow<Set<Long>>(emptySet())
     val selectedIds: StateFlow<Set<Long>> = _selectedIds
 
@@ -141,8 +157,10 @@ class DashboardViewModel @Inject constructor(
             }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
-    val pagedItems: Flow<PagingData<DashboardItem>> = combine(_searchQuery, _refreshTrigger) { query, _ -> query }
-        .flatMapLatest { query -> repository.getRecordsPaged(query) }
+    val pagedItems: Flow<PagingData<DashboardItem>> = combine(
+        _searchQuery, _searchStartTime, _searchEndTime, _selectedSearchCategory, _refreshTrigger
+    ) { query, start, end, cat, _ -> AdvancedSearchParams(query, start, end, cat) }
+        .flatMapLatest { params -> repository.getRecordsPaged(params.query, params.startTime, params.endTime, params.categoryName) }
         .map { pagingData ->
             pagingData
                 .map<Record, DashboardItem> { DashboardItem.Record(it) }
@@ -174,6 +192,26 @@ class DashboardViewModel @Inject constructor(
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
+    }
+
+    fun setSearchDateRange(start: Long?, end: Long?) {
+        _searchStartTime.value = start
+        _searchEndTime.value = end
+    }
+
+    fun clearSearchDateRange() {
+        _searchStartTime.value = null
+        _searchEndTime.value = null
+    }
+
+    fun setSearchCategory(categoryName: String?) {
+        _selectedSearchCategory.value = categoryName
+    }
+
+    fun clearAdvancedSearch() {
+        _selectedSearchCategory.value = null
+        _searchStartTime.value = null
+        _searchEndTime.value = null
     }
 
     fun toggleSelection(id: Long) {

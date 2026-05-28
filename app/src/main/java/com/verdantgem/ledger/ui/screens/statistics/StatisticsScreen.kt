@@ -35,10 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.window.Dialog
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import com.verdantgem.ledger.ui.theme.dimens
 import java.text.SimpleDateFormat
 import java.util.*
@@ -176,10 +173,67 @@ fun YearPickerDialog(
     }
 }
 
+private fun computeStatsTimeRange(mode: StatsMode, date: Calendar): Pair<Long, Long> {
+    return when (mode) {
+        StatsMode.RECENT -> {
+            val cal = Calendar.getInstance().apply {
+                firstDayOfWeek = Calendar.MONDAY
+                set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            Pair(cal.timeInMillis, System.currentTimeMillis())
+        }
+        StatsMode.MONTH -> {
+            val calStart = Calendar.getInstance().apply {
+                timeInMillis = date.timeInMillis
+                set(Calendar.DAY_OF_MONTH, 1)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val calEnd = Calendar.getInstance().apply {
+                timeInMillis = date.timeInMillis
+                set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
+                set(Calendar.HOUR_OF_DAY, 23)
+                set(Calendar.MINUTE, 59)
+                set(Calendar.SECOND, 59)
+                set(Calendar.MILLISECOND, 999)
+            }
+            Pair(calStart.timeInMillis, calEnd.timeInMillis)
+        }
+        StatsMode.YEAR -> {
+            val calStart = Calendar.getInstance().apply {
+                timeInMillis = date.timeInMillis
+                set(Calendar.MONTH, 0)
+                set(Calendar.DAY_OF_MONTH, 1)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val calEnd = Calendar.getInstance().apply {
+                timeInMillis = date.timeInMillis
+                set(Calendar.MONTH, 11)
+                set(Calendar.DAY_OF_MONTH, 31)
+                set(Calendar.HOUR_OF_DAY, 23)
+                set(Calendar.MINUTE, 59)
+                set(Calendar.SECOND, 59)
+                set(Calendar.MILLISECOND, 999)
+            }
+            Pair(calStart.timeInMillis, calEnd.timeInMillis)
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatisticsScreen(
-    viewModel: StatisticsViewModel = hiltViewModel()
+    viewModel: StatisticsViewModel = hiltViewModel(),
+    onNavigateToCategoryRecords: (String, Boolean, Long, Long, Boolean) -> Unit = { _, _, _, _, _ -> }
 ) {
     val d = MaterialTheme.dimens
     val mode by viewModel.mode.collectAsState()
@@ -193,17 +247,11 @@ fun StatisticsScreen(
     val totalIncome by viewModel.totalIncome.collectAsState()
     val totalExpense by viewModel.totalExpense.collectAsState()
     val totalSurplus by viewModel.totalSurplus.collectAsState()
+    val allCategories by viewModel.allCategories.collectAsState()
 
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_PAUSE) {
-                viewModel.resetToDefault()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
+    DisposableEffect(Unit) {
         onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.resetToDefaultIfNeeded()
         }
     }
 
@@ -446,6 +494,7 @@ fun CategoryRankingList(
     ranking: List<CategoryRank>,
     comparisonMap: Map<String, CategoryComparisonInfo>,
     isIncome: Boolean,
+    onCategoryClick: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val expenseColor = Color(0xFFE53935)
@@ -465,7 +514,15 @@ fun CategoryRankingList(
 
         ranking.forEach { item ->
             val comparison = comparisonMap[item.name]
-            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 5.dp)
+                    .let { mod ->
+                        if (onCategoryClick != null) mod.clickable { onCategoryClick(item.name) }
+                        else mod
+                    }
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -580,6 +637,20 @@ fun CategoryRankingList(
                 ranking = ranking,
                 comparisonMap = comparisonMap,
                 isIncome = isCategoryIncome,
+                onCategoryClick = { displayName ->
+                    viewModel.skipNextReset()
+                    val (startTime, endTime) = computeStatsTimeRange(mode, selectedDate)
+                    if (showDetail) {
+                        val category = allCategories.firstOrNull {
+                            it.parentName != null && "${it.parentName}-${it.name}" == displayName
+                        }
+                        if (category != null) {
+                            onNavigateToCategoryRecords(category.name, false, startTime, endTime, isCategoryIncome)
+                        }
+                    } else {
+                        onNavigateToCategoryRecords(displayName, true, startTime, endTime, isCategoryIncome)
+                    }
+                },
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
 
