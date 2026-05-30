@@ -186,7 +186,10 @@ class LedgerRepository @Inject constructor(
     }
 
     suspend fun seedDefaultCategories() {
-        if (categoryDao.getCategoryCount() > 0) return
+        if (categoryDao.getCategoryCount() > 0) {
+            seedBrandMappings()
+            return
+        }
         categoryDao.insertCategories(DefaultCategories.getAll())
         seedBrandMappings()
     }
@@ -234,9 +237,40 @@ class LedgerRepository @Inject constructor(
         }
     }
 
+    /**
+     * 获取指定分类下的所有品牌映射
+     */
+    suspend fun getBrandMappingsByCategory(categoryId: Long): List<BrandMapping> =
+        brandMappingDao.getByCategoryId(categoryId)
+
+    /**
+     * 删除指定品牌映射
+     */
+    suspend fun deleteBrandMapping(id: Long) {
+        brandMappingDao.deleteById(id)
+        changeNotifier.notifyChange()
+    }
+
+    /**
+     * 手动添加品牌映射（管理界面使用）
+     */
+    suspend fun addBrandMapping(brandName: String, categoryId: Long) {
+        val existing = brandMappingDao.getByBrandName(brandName)
+        if (existing == null) {
+            brandMappingDao.upsert(BrandMapping(
+                brandName = brandName,
+                categoryId = categoryId,
+                source = "user"
+            ))
+            changeNotifier.notifyChange()
+        }
+    }
+
     suspend fun resetToDefaultCategories() {
         categoryDao.deleteAll()
         categoryDao.insertCategories(DefaultCategories.getAll())
+        brandMappingDao.deleteAll()
+        seedBrandMappings()
     }
 
     suspend fun getAllRecordsForSync(): List<Record> = recordDao.getAllRecordsForSync()

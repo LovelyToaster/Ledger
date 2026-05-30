@@ -27,6 +27,8 @@ import com.verdantgem.ledger.ui.screens.record.CategoryEditDetailScreen
 import com.verdantgem.ledger.ui.screens.record.CategoryEditScreen
 import com.verdantgem.ledger.ui.screens.record.RecordDetailScreen
 import com.verdantgem.ledger.ui.screens.record.CategoryViewModel
+import com.verdantgem.ledger.ui.screens.record.TagItem
+import com.verdantgem.ledger.ui.screens.record.TagListScreen
 import com.verdantgem.ledger.ui.screens.settings.SettingsViewModel
 import com.verdantgem.ledger.ui.screens.settings.ThemeSettingScreen
 import androidx.navigation.NavType
@@ -129,13 +131,17 @@ class MainActivity : ComponentActivity() {
                         composable("add_record") {
                             AddRecordScreen(
                                 onBack = { navController.popBackStack() },
-                                onNavigateToCategoryEdit = { navController.navigate("category_edit") }
+                                onNavigateToCategoryEdit = {
+                                    categoryViewModel.resetExpandState()
+                                    navController.navigate("category_edit")
+                                }
                             )
                         }
                         composable("category_edit") {
                             CategoryEditScreen(
                                 onBack = { navController.popBackStack() },
                                 categories = categories,
+                                viewModel = categoryViewModel,
                                 onAdd = { name, parent, income -> categoryViewModel.addCategory(name, parent, income) },
                                 onNavigateToDetail = { id -> navController.navigate("category_edit_detail/$id") },
                                 onDelete = { categoryViewModel.deleteCategory(it) },
@@ -150,6 +156,56 @@ class MainActivity : ComponentActivity() {
                             CategoryEditDetailScreen(
                                 categoryId = categoryId,
                                 viewModel = categoryViewModel,
+                                onBack = { navController.popBackStack() },
+                                onNavigateToPrompts = { id -> navController.navigate("category_prompts/$id") },
+                                onNavigateToBrands = { id -> navController.navigate("category_brands/$id") }
+                            )
+                        }
+                        composable(
+                            "category_prompts/{categoryId}",
+                            arguments = listOf(navArgument("categoryId") { type = NavType.LongType })
+                        ) { backStackEntry ->
+                            val categoryId = backStackEntry.arguments?.getLong("categoryId") ?: return@composable
+                            val cat = categories.find { it.id == categoryId }
+                            if (cat == null) {
+                                navController.popBackStack()
+                                return@composable
+                            }
+                            val prompts = cat.prompts.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                            val promptItems = prompts.map { TagItem(id = it, label = it) }
+                            TagListScreen(
+                                title = "提示词管理",
+                                subtitle = "输入关键词后点击添加按钮，快速记账时输入对应文字即可自动匹配到此分类",
+                                placeholder = "如：可乐、汽水、早餐",
+                                items = promptItems,
+                                onAdd = { word -> categoryViewModel.addPrompt(categoryId, word) },
+                                onDelete = { item -> categoryViewModel.removePrompt(categoryId, item.label) },
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable(
+                            "category_brands/{categoryId}",
+                            arguments = listOf(navArgument("categoryId") { type = NavType.LongType })
+                        ) { backStackEntry ->
+                            val categoryId = backStackEntry.arguments?.getLong("categoryId") ?: return@composable
+                            // 使用 collectAsState 获取实时数据
+                            val brandMappings by categoryViewModel.allBrandMappings.collectAsState()
+                            val brandItems = brandMappings
+                                .filter { it.categoryId == categoryId }
+                                .map { mapping ->
+                                    TagItem(
+                                        id = mapping.id.toString(),
+                                        label = mapping.brandName,
+                                        subtitle = if (mapping.source == "default") "预置" else "用户"
+                                    )
+                                }
+                            TagListScreen(
+                                title = "关联品牌",
+                                subtitle = "添加品牌后，快速记账时输入品牌名即可自动匹配到此分类",
+                                placeholder = "如：星巴克、可口可乐",
+                                items = brandItems,
+                                onAdd = { brandName -> categoryViewModel.addBrandMapping(brandName, categoryId) },
+                                onDelete = { item -> categoryViewModel.deleteBrandMapping(item.id.toLong()) },
                                 onBack = { navController.popBackStack() }
                             )
                         }

@@ -29,6 +29,7 @@ import com.verdantgem.ledger.ui.theme.windowSize
 fun CategoryEditScreen(
     onBack: () -> Unit,
     categories: List<Category>,
+    viewModel: CategoryViewModel,
     onAdd: (String, String?, Boolean) -> Unit,
     onNavigateToDetail: (Long) -> Unit,
     onDelete: (Category) -> Unit,
@@ -53,6 +54,12 @@ fun CategoryEditScreen(
     val parentCategories = remember(filteredCategories) {
         filteredCategories.filter { it.parentName == null }
     }
+
+    // 展开状态托管在 ViewModel 中，Navigation 跳转回来不丢失
+    val expandedParentIds by viewModel.expandedParentIds.collectAsState()
+
+    // 注意：展开状态不在此处重置，由外部导航进入时由调用方主动 resetExpandState()
+    // 从子页面（详情/提示词/品牌）返回时，状态保持不丢失
 
     Column(
         modifier = Modifier
@@ -144,6 +151,8 @@ fun CategoryEditScreen(
                     parent = parent,
                     subs = subs,
                     gridColumns = gridColumns,
+                    expanded = parent.id in expandedParentIds,
+                    onToggle = { viewModel.toggleExpand(parent.id) },
                     onAddSub = { subName -> onAdd(subName, parent.name, currentTabIsIncome) },
                     onNavigateToDetail = onNavigateToDetail,
                     onDelete = onDelete
@@ -205,18 +214,19 @@ fun CategoryGroup(
     parent: Category,
     subs: List<Category>,
     gridColumns: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
     onAddSub: (String) -> Unit,
     onNavigateToDetail: (Long) -> Unit,
     onDelete: (Category) -> Unit = {}
 ) {
-    var expanded by remember { mutableStateOf(false) }
     var showAddSubDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var subName by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         Surface(
-            onClick = { expanded = !expanded },
+            onClick = onToggle,
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         ) {
@@ -224,7 +234,7 @@ fun CategoryGroup(
                 modifier = Modifier.padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { expanded = !expanded }) {
+                IconButton(onClick = onToggle) {
                     Icon(
                         if (expanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
                         contentDescription = null

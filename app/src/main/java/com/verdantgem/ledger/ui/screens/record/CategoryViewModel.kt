@@ -9,8 +9,10 @@ import com.verdantgem.ledger.data.remote.LocationDelegate
 import com.verdantgem.ledger.data.remote.LocationProvider
 import com.verdantgem.ledger.data.repository.LedgerRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -28,6 +30,21 @@ class CategoryViewModel @Inject constructor(
 
     val allBrandMappings: StateFlow<List<BrandMapping>> = repository.allBrandMappings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** 分类编辑页面的父类别展开状态，提升到 ViewModel 以避免 Navigation 跳转丢失 */
+    private val _expandedParentIds = MutableStateFlow<Set<Long>>(emptySet())
+    val expandedParentIds: StateFlow<Set<Long>> = _expandedParentIds.asStateFlow()
+
+    fun toggleExpand(parentId: Long) {
+        _expandedParentIds.value = if (parentId in _expandedParentIds.value)
+            _expandedParentIds.value - parentId
+        else
+            _expandedParentIds.value + parentId
+    }
+
+    fun resetExpandState() {
+        _expandedParentIds.value = emptySet()
+    }
 
     fun startLocation() = locationDelegate.startLocation(viewModelScope)
 
@@ -63,6 +80,44 @@ class CategoryViewModel @Inject constructor(
             if (cat != null) {
                 repository.learnBrandMapping(brandName, cat.id)
             }
+        }
+    }
+
+    // ========== 提示词管理 ==========
+
+    fun addPrompt(categoryId: Long, prompt: String) {
+        viewModelScope.launch {
+            val cat = repository.getAllCategoriesList().firstOrNull { it.id == categoryId } ?: return@launch
+            val prompts = cat.prompts.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toMutableList()
+            val trimmed = prompt.trim()
+            if (trimmed.isNotEmpty() && trimmed !in prompts) {
+                prompts.add(trimmed)
+                repository.updateCategory(cat.copy(prompts = prompts.joinToString(",")))
+            }
+        }
+    }
+
+    fun removePrompt(categoryId: Long, prompt: String) {
+        viewModelScope.launch {
+            val cat = repository.getAllCategoriesList().firstOrNull { it.id == categoryId } ?: return@launch
+            val prompts = cat.prompts.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toMutableList()
+            if (prompts.remove(prompt.trim())) {
+                repository.updateCategory(cat.copy(prompts = prompts.joinToString(",")))
+            }
+        }
+    }
+
+    // ========== 品牌映射管理 ==========
+
+    fun addBrandMapping(brandName: String, categoryId: Long) {
+        viewModelScope.launch {
+            repository.addBrandMapping(brandName, categoryId)
+        }
+    }
+
+    fun deleteBrandMapping(id: Long) {
+        viewModelScope.launch {
+            repository.deleteBrandMapping(id)
         }
     }
 

@@ -21,6 +21,15 @@ interface BrandMappingDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(mapping: BrandMapping)
 
+    @Query("SELECT * FROM brand_mappings WHERE categoryId = :categoryId")
+    suspend fun getByCategoryId(categoryId: Long): List<BrandMapping>
+
+    @Query("DELETE FROM brand_mappings WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM brand_mappings")
+    suspend fun deleteAll()
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(mappings: List<BrandMapping>)
 }
