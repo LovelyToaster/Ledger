@@ -111,6 +111,9 @@ class DashboardViewModel @Inject constructor(
     private val _selectedSearchCategory = MutableStateFlow<String?>(null)
     val selectedSearchCategory: StateFlow<String?> = _selectedSearchCategory
 
+    /** 单一搜索参数源 — 避免 combine 竞态条件导致 cachedIn 缓存旧分页数据 */
+    private val _searchParams = MutableStateFlow(AdvancedSearchParams())
+
     private val _selectedIds = MutableStateFlow<Set<Long>>(emptySet())
     val selectedIds: StateFlow<Set<Long>> = _selectedIds
 
@@ -157,9 +160,7 @@ class DashboardViewModel @Inject constructor(
             }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
-    val pagedItems: Flow<PagingData<DashboardItem>> = combine(
-        _searchQuery, _searchStartTime, _searchEndTime, _selectedSearchCategory, _refreshTrigger
-    ) { query, start, end, cat, _ -> AdvancedSearchParams(query, start, end, cat) }
+    val pagedItems: Flow<PagingData<DashboardItem>> = _searchParams
         .flatMapLatest { params -> repository.getRecordsPaged(params.query, params.startTime, params.endTime, params.categoryName) }
         .map { pagingData ->
             pagingData
@@ -192,26 +193,65 @@ class DashboardViewModel @Inject constructor(
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
+        _searchParams.value = AdvancedSearchParams(
+            query = query,
+            startTime = _searchParams.value.startTime,
+            endTime = _searchParams.value.endTime,
+            categoryName = _searchParams.value.categoryName
+        )
     }
 
     fun setSearchDateRange(start: Long?, end: Long?) {
         _searchStartTime.value = start
         _searchEndTime.value = end
+        _searchParams.value = AdvancedSearchParams(
+            query = _searchParams.value.query,
+            startTime = start,
+            endTime = end,
+            categoryName = _searchParams.value.categoryName
+        )
     }
 
     fun clearSearchDateRange() {
         _searchStartTime.value = null
         _searchEndTime.value = null
+        _searchParams.value = AdvancedSearchParams(
+            query = _searchParams.value.query,
+            startTime = null,
+            endTime = null,
+            categoryName = _searchParams.value.categoryName
+        )
     }
 
     fun setSearchCategory(categoryName: String?) {
         _selectedSearchCategory.value = categoryName
+        _searchParams.value = AdvancedSearchParams(
+            query = _searchParams.value.query,
+            startTime = _searchParams.value.startTime,
+            endTime = _searchParams.value.endTime,
+            categoryName = categoryName
+        )
+    }
+
+    /** 高级搜索对话框原子化提交 — 一次性更新所有参数，避免竞态条件 */
+    fun applyAdvancedSearch(query: String, start: Long?, end: Long?, category: String?) {
+        _searchQuery.value = query
+        _searchStartTime.value = start
+        _searchEndTime.value = end
+        _selectedSearchCategory.value = category
+        _searchParams.value = AdvancedSearchParams(query, start, end, category)
     }
 
     fun clearAdvancedSearch() {
         _selectedSearchCategory.value = null
         _searchStartTime.value = null
         _searchEndTime.value = null
+        _searchParams.value = AdvancedSearchParams(
+            query = _searchQuery.value,
+            startTime = null,
+            endTime = null,
+            categoryName = null
+        )
     }
 
     fun toggleSelection(id: Long) {

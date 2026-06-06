@@ -383,9 +383,7 @@ fun DashboardScreen(
             currentEndTime = searchEndTime,
             currentCategoryName = selectedSearchCategory,
             onApply = { query, start, end, categoryName ->
-                viewModel.setSearchQuery(query)
-                viewModel.setSearchDateRange(start, end)
-                viewModel.setSearchCategory(categoryName)
+                viewModel.applyAdvancedSearch(query, start, end, categoryName)
                 showAdvancedSearch = false
             },
             onClear = {
