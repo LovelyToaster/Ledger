@@ -389,9 +389,25 @@ class StatisticsViewModel @Inject constructor(
     }
 
     private var skipNextReset = false
+    private var currentScrollPosition = 0
+    private var savedScrollPosition: Int? = null
 
     fun skipNextReset() {
         skipNextReset = true
+    }
+
+    fun saveCurrentScroll(pos: Int) {
+        currentScrollPosition = pos
+    }
+
+    fun saveScrollOnExit() {
+        savedScrollPosition = if (skipNextReset) currentScrollPosition else null
+    }
+
+    fun consumeScrollPosition(): Int? {
+        val v = savedScrollPosition
+        savedScrollPosition = null
+        return v
     }
 
     fun resetToDefaultIfNeeded() {

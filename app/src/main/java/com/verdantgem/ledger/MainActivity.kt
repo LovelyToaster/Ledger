@@ -14,8 +14,12 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -57,47 +61,58 @@ class MainActivity : ComponentActivity() {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
 
+                val bottomSlotPx = remember { mutableStateOf(0) }
+                val density = LocalDensity.current
+
                 Scaffold(
                     bottomBar = {
                         val showBottomBar = currentRoute in listOf("dashboard", "statistics", "about")
-                        if (showBottomBar) {
-                            NavigationBar(containerColor = Color.Transparent) {
-                                NavigationBarItem(
-                                    icon = { Icon(Icons.Default.Home, contentDescription = "首页") },
-                                    label = { Text("总览") },
-                                    selected = currentRoute == "dashboard",
-                                    onClick = { 
-                                        navController.navigate("dashboard") {
-                                            popUpTo("dashboard") { saveState = true }
-                                            launchSingleTop = true
-                                            restoreState = true
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onSizeChanged { if (showBottomBar) bottomSlotPx.value = it.height }
+                        ) {
+                            if (showBottomBar) {
+                                NavigationBar(containerColor = Color.Transparent) {
+                                    NavigationBarItem(
+                                        icon = { Icon(Icons.Default.Home, contentDescription = "首页") },
+                                        label = { Text("总览") },
+                                        selected = currentRoute == "dashboard",
+                                        onClick = { 
+                                            navController.navigate("dashboard") {
+                                                popUpTo("dashboard") { saveState = true }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
                                         }
-                                    }
-                                )
-                                NavigationBarItem(
-                                    icon = { Icon(Icons.Default.DateRange, contentDescription = "统计") },
-                                    label = { Text("统计") },
-                                    selected = currentRoute == "statistics",
-                                    onClick = { 
-                                        navController.navigate("statistics") {
-                                            popUpTo("dashboard") { saveState = true }
-                                            launchSingleTop = true
-                                            restoreState = true
+                                    )
+                                    NavigationBarItem(
+                                        icon = { Icon(Icons.Default.DateRange, contentDescription = "统计") },
+                                        label = { Text("统计") },
+                                        selected = currentRoute == "statistics",
+                                        onClick = { 
+                                            navController.navigate("statistics") {
+                                                popUpTo("dashboard") { saveState = true }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
                                         }
-                                    }
-                                )
-                                NavigationBarItem(
-                                    icon = { Icon(Icons.Default.AccountCircle, contentDescription = "关于") },
-                                    label = { Text("关于") },
-                                    selected = currentRoute == "about",
-                                    onClick = { 
-                                        navController.navigate("about") {
-                                            popUpTo("dashboard") { saveState = true }
-                                            launchSingleTop = true
-                                            restoreState = true
+                                    )
+                                    NavigationBarItem(
+                                        icon = { Icon(Icons.Default.AccountCircle, contentDescription = "关于") },
+                                        label = { Text("关于") },
+                                        selected = currentRoute == "about",
+                                        onClick = { 
+                                            navController.navigate("about") {
+                                                popUpTo("dashboard") { saveState = true }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
                                         }
-                                    }
-                                )
+                                    )
+                                }
+                            } else if (bottomSlotPx.value > 0) {
+                                Spacer(modifier = Modifier.height(with(density) { bottomSlotPx.value.toDp() }))
                             }
                         }
                     }

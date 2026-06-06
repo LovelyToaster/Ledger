@@ -5,7 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -251,6 +251,7 @@ fun StatisticsScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            viewModel.saveScrollOnExit()
             viewModel.resetToDefaultIfNeeded()
         }
     }
@@ -264,11 +265,15 @@ fun StatisticsScreen(
         },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
+        val scrollState = remember { ScrollState(viewModel.consumeScrollPosition() ?: 0) }
+        LaunchedEffect(scrollState.value) {
+            viewModel.saveCurrentScroll(scrollState.value)
+        }
         Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             TabRow(
