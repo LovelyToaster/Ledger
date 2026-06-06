@@ -28,6 +28,12 @@ interface RecordDao {
     @Query("SELECT * FROM records WHERE deleted = 0 AND (note LIKE '%' || :query || '%' OR categoryName LIKE '%' || :query || '%') AND categoryName = :categoryName AND date >= :startTime AND date <= :endTime ORDER BY date DESC")
     fun getSearchWithCategoryAndDateRangePagingSource(query: String, categoryName: String, startTime: Long, endTime: Long): PagingSource<Int, Record>
 
+    @Query("SELECT * FROM records WHERE deleted = 0 AND categoryName = :categoryName ORDER BY date DESC")
+    fun getRecordsByCategoryOnlyPagingSource(categoryName: String): PagingSource<Int, Record>
+
+    @Query("SELECT * FROM records WHERE deleted = 0 AND (note LIKE '%' || :query || '%' OR categoryName LIKE '%' || :query || '%') AND categoryName = :categoryName ORDER BY date DESC")
+    fun getSearchWithCategoryOnlyPagingSource(query: String, categoryName: String): PagingSource<Int, Record>
+
     @Query("SELECT * FROM records WHERE deleted = 0 AND categoryName IN (SELECT name FROM categories WHERE parentName = :parentName AND isIncome = :isIncome) AND date >= :startTime AND date <= :endTime ORDER BY date DESC")
     fun getRecordsByParentCategoryPagingSource(parentName: String, isIncome: Boolean, startTime: Long, endTime: Long): PagingSource<Int, Record>
 

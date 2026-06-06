@@ -331,7 +331,10 @@ class SyncManager @Inject constructor(
                 local = localRecordsByUuid[remote.syncUuid]
             }
             if (local == null) {
-                local = localRecordsById[remote.id]
+                val byId = localRecordsById[remote.id]
+                if (byId != null && (byId.syncUuid.isBlank() || byId.syncUuid == remote.syncUuid)) {
+                    local = byId
+                }
             }
 
             if (local == null || remote.updatedAt > local.updatedAt) {
@@ -362,7 +365,10 @@ class SyncManager @Inject constructor(
                 local = localCategoriesByUuid[remote.syncUuid]
             }
             if (local == null) {
-                local = localCategoriesById[remote.id]
+                val byId = localCategoriesById[remote.id]
+                if (byId != null && (byId.syncUuid.isBlank() || byId.syncUuid == remote.syncUuid)) {
+                    local = byId
+                }
             }
             // 第三回退：按 (name, parentName, isIncome) 语义匹配，处理跨设备 ID 漂移
             if (local == null) {

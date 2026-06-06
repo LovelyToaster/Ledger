@@ -51,8 +51,14 @@ class LedgerRepository @Inject constructor(
                         recordDao.getSearchWithCategoryAndDateRangePagingSource(query, searchCategoryName, searchStartTime, searchEndTime)
                     query.isNotEmpty() && searchStartTime != null && searchEndTime != null ->
                         recordDao.getSearchWithDateRangePagingSource(query, searchStartTime, searchEndTime)
+                    searchCategoryName != null && searchStartTime != null && searchEndTime != null ->
+                        recordDao.getRecordsByCategoryPagingSource(searchCategoryName, searchStartTime, searchEndTime)
+                    query.isNotEmpty() && searchCategoryName != null ->
+                        recordDao.getSearchWithCategoryOnlyPagingSource(query, searchCategoryName)
                     query.isNotEmpty() ->
                         recordDao.getSearchPagingSource(query)
+                    searchCategoryName != null ->
+                        recordDao.getRecordsByCategoryOnlyPagingSource(searchCategoryName)
                     searchStartTime != null && searchEndTime != null ->
                         recordDao.getRecordsInDateRange(searchStartTime, searchEndTime)
                     else ->
@@ -281,9 +287,12 @@ class LedgerRepository @Inject constructor(
     suspend fun insertRecordForSync(record: Record) {
         val effectiveSyncUuid = record.syncUuid.ifBlank { java.util.UUID.randomUUID().toString() }
         var existing = recordDao.getRecordBySyncUuid(effectiveSyncUuid)
-        // 回退：如果 UUID 找不到但 id 有效，按 id 查找（处理跨设备 UUID 不一致）
+        // 回退：如果 UUID 找不到但 id 有效，按 id 查找（仅限本地 syncUuid 为空或与目标一致的旧格式记录）
         if (existing == null && record.id > 0) {
-            existing = recordDao.getRecordById(record.id)
+            val byId = recordDao.getRecordById(record.id)
+            if (byId != null && (byId.syncUuid.isBlank() || byId.syncUuid == effectiveSyncUuid)) {
+                existing = byId
+            }
         }
         if (existing != null) {
             // 本地已有记录，用远程数据覆盖但保留本地 id，收敛 UUID 为远程值
@@ -297,9 +306,12 @@ class LedgerRepository @Inject constructor(
     suspend fun upsertCategoryForSync(category: Category) {
         val effectiveSyncUuid = category.syncUuid.ifBlank { java.util.UUID.randomUUID().toString() }
         var existing = categoryDao.getCategoryBySyncUuid(effectiveSyncUuid)
-        // 回退：如果 UUID 找不到但 id 有效，按 id 查找（处理跨设备 UUID 不一致）
+        // 回退：如果 UUID 找不到但 id 有效，按 id 查找（仅限本地 syncUuid 为空或与目标一致的旧格式记录）
         if (existing == null && category.id > 0) {
-            existing = categoryDao.getCategoryById(category.id)
+            val byId = categoryDao.getCategoryById(category.id)
+            if (byId != null && (byId.syncUuid.isBlank() || byId.syncUuid == effectiveSyncUuid)) {
+                existing = byId
+            }
         }
         // 第三回退：按 (name, parentName, isIncome) 语义匹配（处理重置类别后 ID 漂移）
         if (existing == null) {
