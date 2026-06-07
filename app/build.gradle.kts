@@ -16,8 +16,8 @@ android {
         applicationId = "com.verdantgem.ledger"
         minSdk = 34
         targetSdk = 36
-        versionCode = 15
-        versionName = "1.5.1"
+        versionCode = 17
+        versionName = "1.5.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

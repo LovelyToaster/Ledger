@@ -2,7 +2,7 @@
 
 ## 项目信息
 - 包名：`com.verdantgem.ledger`
-- 当前版本：1.5.0（versionCode = 14）
+- 当前版本：1.5.1（versionCode = 15）
 - 技术栈：Kotlin + Jetpack Compose + Hilt + Room + Paging 3 + OkHttp + Apache POI (XLS)
 - 最低 SDK：34 (Android 14)
 - 目标 SDK：36 (Android 16)
@@ -64,6 +64,7 @@
 - 下载远程快照，逐实体比对 `updatedAt`，时间戳较新的覆盖
 - **身份匹配**：使用 `syncUuid`（UUID 字符串）而非本地自增 `id` 进行跨设备实体匹配
 - `insertRecordForSync`/`upsertCategoryForSync`/`upsertBudgetForSync` 先按 `syncUuid` 查找已有记录，存在则保留本地 `id` 更新内容，不存在则新建
+- **ID 回退匹配安全限制**：`mergeSnapshot` 和 Repository 层的 ID 回退匹配（`getRecordById`/`getCategoryById`）必须增加守卫条件 `byId.syncUuid.isBlank() || byId.syncUuid == remote.syncUuid`。因为 `id` 是本地自增主键，不同设备上的不同记录可能拥有相同 `id`，不加校验会导致跨设备记录被误匹配覆盖。
 - 使用 `kotlinx.serialization` 格式化，Hilt `@Singleton` 管理状态
 
 ### 流量优化
