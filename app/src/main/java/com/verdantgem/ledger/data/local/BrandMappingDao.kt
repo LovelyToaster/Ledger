@@ -6,10 +6,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface BrandMappingDao {
-    @Query("SELECT * FROM brand_mappings")
+    @Query("SELECT * FROM brand_mappings ORDER BY length(brandName) DESC, hitCount DESC")
     fun getAllMappings(): Flow<List<BrandMapping>>
 
-    @Query("SELECT * FROM brand_mappings")
+    @Query("SELECT * FROM brand_mappings ORDER BY length(brandName) DESC, hitCount DESC")
     suspend fun getAllMappingsList(): List<BrandMapping>
 
     @Query("SELECT COUNT(*) FROM brand_mappings")

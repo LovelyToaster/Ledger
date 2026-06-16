@@ -146,13 +146,9 @@ fun AddRecordScreen(
                 billDate = billDate
             )
             if (success) {
-                // 用户自学习：手动选择分类时记录品牌映射
                 val trimmedNote = note.trim()
                 if (trimmedNote.length >= 2 && selectedSub.isNotEmpty()) {
-                    val autoMatched = noteMatchedCategory?.name
-                    if (autoMatched != selectedSub) {
-                        viewModel.learnBrandMapping(trimmedNote, selectedSub)
-                    }
+                    viewModel.recordUserChoice(trimmedNote, selectedSub)
                 }
                 onBack()
             }

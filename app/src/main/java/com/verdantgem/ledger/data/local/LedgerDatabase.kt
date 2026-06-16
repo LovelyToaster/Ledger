@@ -9,7 +9,7 @@ import com.verdantgem.ledger.data.model.Budget
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
 
-@Database(entities = [Category::class, Record::class, Budget::class, BrandMapping::class], version = 11, exportSchema = false)
+@Database(entities = [Category::class, Record::class, Budget::class, BrandMapping::class], version = 12, exportSchema = false)
 abstract class LedgerDatabase : RoomDatabase() {
     abstract fun recordDao(): RecordDao
     abstract fun categoryDao(): CategoryDao
@@ -87,6 +87,13 @@ abstract class LedgerDatabase : RoomDatabase() {
                 )
                 AND deleted = 0
             """)
+        }
+
+        val MIGRATION_11_12 = Migration(11, 12) { db ->
+            // 新增 confirmCount 和 missCount 字段
+            // 已有映射全部设 confirmCount=3（保持有效），missCount=0
+            db.execSQL("ALTER TABLE brand_mappings ADD COLUMN confirmCount INTEGER NOT NULL DEFAULT 3")
+            db.execSQL("ALTER TABLE brand_mappings ADD COLUMN missCount INTEGER NOT NULL DEFAULT 0")
         }
     }
 }

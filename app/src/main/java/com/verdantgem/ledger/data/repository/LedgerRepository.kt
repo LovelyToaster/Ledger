@@ -213,7 +213,8 @@ class LedgerRepository @Inject constructor(
                 BrandMapping(
                     brandName = brandName,
                     categoryId = cat.id,
-                    source = "default"
+                    source = "default",
+                    confirmCount = 3
                 )
             } else null
         }
@@ -223,22 +224,39 @@ class LedgerRepository @Inject constructor(
     }
 
     /**
-     * 用户自学习：记录未知品牌→分类的映射
-     * @param brandName 品牌名/备注文本
-     * @param categoryId 用户选择的分组 ID
+     * 用户选择记录：处理品牌映射学习 + miss 衰减
+     *
+     * - 无已有映射 → 创建新映射，confirmCount=1（需多次确认才生效）
+     * - 已有映射且类别相同 → confirmCount++（上限 3），missCount 归零
+     * - 已有映射但用户选了不同类别 → missCount++；missCount >= 3 则自动删除
      */
-    suspend fun learnBrandMapping(brandName: String, categoryId: Long) {
+    suspend fun recordUserChoice(brandName: String, chosenCategoryId: Long) {
         val existing = brandMappingDao.getByBrandName(brandName)
         if (existing != null) {
-            brandMappingDao.upsert(existing.copy(
-                hitCount = existing.hitCount + 1,
-                updatedAt = System.currentTimeMillis()
-            ))
+            if (existing.categoryId == chosenCategoryId) {
+                brandMappingDao.upsert(existing.copy(
+                    confirmCount = minOf(existing.confirmCount + 1, 3),
+                    missCount = 0,
+                    hitCount = existing.hitCount + 1,
+                    updatedAt = System.currentTimeMillis()
+                ))
+            } else {
+                val newMissCount = existing.missCount + 1
+                if (newMissCount >= 3) {
+                    brandMappingDao.deleteById(existing.id)
+                } else {
+                    brandMappingDao.upsert(existing.copy(
+                        missCount = newMissCount,
+                        updatedAt = System.currentTimeMillis()
+                    ))
+                }
+            }
         } else {
             brandMappingDao.upsert(BrandMapping(
                 brandName = brandName,
-                categoryId = categoryId,
-                source = "user"
+                categoryId = chosenCategoryId,
+                source = "user",
+                confirmCount = 1
             ))
         }
     }
@@ -258,7 +276,7 @@ class LedgerRepository @Inject constructor(
     }
 
     /**
-     * 手动添加品牌映射（管理界面使用）
+     * 手动添加品牌映射（管理界面使用），确认次数满 3 立即生效
      */
     suspend fun addBrandMapping(brandName: String, categoryId: Long) {
         val existing = brandMappingDao.getByBrandName(brandName)
@@ -266,7 +284,8 @@ class LedgerRepository @Inject constructor(
             brandMappingDao.upsert(BrandMapping(
                 brandName = brandName,
                 categoryId = categoryId,
-                source = "user"
+                source = "user",
+                confirmCount = 3
             ))
             changeNotifier.notifyChange()
         }

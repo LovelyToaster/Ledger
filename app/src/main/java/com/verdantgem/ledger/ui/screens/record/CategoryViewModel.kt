@@ -74,11 +74,11 @@ class CategoryViewModel @Inject constructor(
         }
     }
 
-    fun learnBrandMapping(brandName: String, categoryName: String) {
+    fun recordUserChoice(brandName: String, categoryName: String) {
         viewModelScope.launch {
             val cat = repository.getAllCategoriesList().firstOrNull { it.name == categoryName }
             if (cat != null) {
-                repository.learnBrandMapping(brandName, cat.id)
+                repository.recordUserChoice(brandName, cat.id)
             }
         }
     }

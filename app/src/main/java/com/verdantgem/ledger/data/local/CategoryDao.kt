@@ -6,10 +6,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CategoryDao {
-    @Query("SELECT * FROM categories WHERE deleted = 0")
+    @Query("SELECT * FROM categories WHERE deleted = 0 ORDER BY isIncome ASC, name ASC")
     fun getAllCategories(): Flow<List<Category>>
 
-    @Query("SELECT * FROM categories WHERE deleted = 0")
+    @Query("SELECT * FROM categories WHERE deleted = 0 ORDER BY isIncome ASC, name ASC")
     suspend fun getAllCategoriesList(): List<Category>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)

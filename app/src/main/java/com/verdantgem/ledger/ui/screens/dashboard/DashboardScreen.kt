@@ -359,8 +359,8 @@ fun DashboardScreen(
                     onCategoryChange = { quickCategoryName = it },
                     billDate = quickBillDate,
                     onDateClick = { showDatePicker = true },
-                    onLearnBrand = { brandName, categoryName ->
-                        viewModel.learnBrandMapping(brandName, categoryName)
+                    onRecordUserChoice = { brandName, categoryName ->
+                        viewModel.recordBrandUserChoice(brandName, categoryName)
                     },
                 )
             }
@@ -677,7 +677,7 @@ private fun QuickRecordOverlay(
     onCategoryChange: (String) -> Unit,
     billDate: Long,
     onDateClick: () -> Unit,
-    onLearnBrand: (brandName: String, categoryName: String) -> Unit = { _, _ -> },
+    onRecordUserChoice: (brandName: String, categoryName: String) -> Unit = { _, _ -> },
 ) {
     val d = MaterialTheme.dimens
     var showCategoryPicker by remember { mutableStateOf(false) }
@@ -757,12 +757,8 @@ private fun QuickRecordOverlay(
                         onTextChange = onTextChange,
                         onSend = {
                             val finalCategory = selectedCategory.ifBlank { matchedCategory?.name }
-                            // 用户自学习：手动选择分类时记录品牌映射
-                            if (selectedCategory.isNotBlank() && parsedNote != null && parsedNote.length >= 2) {
-                                val autoMatched = matchedCategory?.name
-                                if (autoMatched != selectedCategory) {
-                                    onLearnBrand(parsedNote, selectedCategory)
-                                }
+                            if (parsedNote != null && parsedNote.length >= 2 && selectedCategory.isNotBlank()) {
+                                onRecordUserChoice(parsedNote, selectedCategory)
                             }
                             onSend(finalCategory, isIncomeCat, billDate)
                         },

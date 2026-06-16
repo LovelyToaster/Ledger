@@ -11,6 +11,8 @@ import androidx.room.PrimaryKey
  * @param categoryId 指向 categories.id
  * @param source 来源："default"（预置）/ "user"（用户自学习）
  * @param hitCount 命中次数（用于热度排序）
+ * @param confirmCount 确认次数，>=3 才参与匹配（自学习需用户多次确认）
+ * @param missCount 命中但未被用户采纳的次数，>=3 自动删除
  */
 @Entity(
     tableName = "brand_mappings",
@@ -22,5 +24,7 @@ data class BrandMapping(
     val categoryId: Long,
     val source: String = "default",
     val hitCount: Int = 0,
+    val confirmCount: Int = 0,
+    val missCount: Int = 0,
     val updatedAt: Long = System.currentTimeMillis()
 )
