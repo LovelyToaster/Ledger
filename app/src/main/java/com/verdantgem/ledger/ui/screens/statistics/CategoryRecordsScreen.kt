@@ -18,6 +18,7 @@ import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
+import com.verdantgem.ledger.ui.components.CategoryIcon
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -117,6 +118,11 @@ private fun CategoryRecordItem(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val cat = categories.firstOrNull { it.name == record.categoryName }
+            if (cat != null) {
+                CategoryIcon(icon = cat.icon, name = cat.name, size = 28.dp)
+                Spacer(modifier = Modifier.width(8.dp))
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = record.note.ifBlank { "无备注" },

@@ -157,7 +157,7 @@ class MainActivity : ComponentActivity() {
                                 onBack = { navController.popBackStack() },
                                 categories = categories,
                                 viewModel = categoryViewModel,
-                                onAdd = { name, parent, income -> categoryViewModel.addCategory(name, parent, income) },
+                                onAdd = { name, parent, income, icon -> categoryViewModel.addCategory(name, parent, income, icon) },
                                 onNavigateToDetail = { id -> navController.navigate("category_edit_detail/$id") },
                                 onDelete = { categoryViewModel.deleteCategory(it) },
                                 onReset = { categoryViewModel.resetToDefault() }

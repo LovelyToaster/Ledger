@@ -50,9 +50,9 @@ class CategoryViewModel @Inject constructor(
 
     fun stopLocation() = locationDelegate.stopLocation()
 
-    fun addCategory(name: String, parentName: String?, isIncome: Boolean) {
+    fun addCategory(name: String, parentName: String?, isIncome: Boolean, icon: String = "default_icon") {
         viewModelScope.launch {
-            repository.addCategory(Category(name = name, parentName = parentName, isIncome = isIncome))
+            repository.addCategory(Category(name = name, parentName = parentName, isIncome = isIncome, icon = icon))
         }
     }
 

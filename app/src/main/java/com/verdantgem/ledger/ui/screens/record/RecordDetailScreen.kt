@@ -9,9 +9,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.List as ListIcon
-import androidx.compose.material.icons.filled.NotInterested
-import androidx.compose.material.icons.filled.Notes
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,6 +28,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
 import com.verdantgem.ledger.data.repository.LedgerRepository
+import com.verdantgem.ledger.ui.components.CategoryIcon
 import com.verdantgem.ledger.ui.components.DateTimePickerDialog
 import com.verdantgem.ledger.ui.components.QuickCategoryPicker
 import com.verdantgem.ledger.ui.components.formatDateTime
@@ -174,12 +173,26 @@ fun RecordDetailScreen(
                         ) {
                             val cat = allCategories.find { it.name == currentRecord.categoryName }
                             val displayName = if (cat?.parentName != null) "${cat.parentName}-${cat.name}" else currentRecord.categoryName
-                            DetailItem(
-                                icon = Icons.Default.ListIcon,
-                                label = "类别",
-                                value = displayName,
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.weight(1f)
-                            )
+                            ) {
+                                CategoryIcon(
+                                    icon = cat?.icon ?: "default_icon",
+                                    name = cat?.name ?: currentRecord.categoryName,
+                                    size = 40.dp
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(text = "类别", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = displayName,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
                             IconButton(
                                 onClick = { viewModel.showCategoryPickerDialog() },
                                 modifier = Modifier.size(32.dp)
@@ -263,7 +276,7 @@ fun RecordDetailScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             DetailItem(
-                                icon = Icons.Default.Notes,
+                                icon = Icons.AutoMirrored.Filled.Notes,
                                 label = "备注",
                                 value = currentRecord.note.ifEmpty { "无备注" },
                                 modifier = Modifier.weight(1f)
@@ -280,50 +293,8 @@ fun RecordDetailScreen(
                                 )
                             }
                         }
-    }
-
-    if (showAmountEditDialog && currentRecord != null) {
-        var amountText by remember(currentRecord) { mutableStateOf(currentRecord.amount.toString()) }
-        var amountError by remember { mutableStateOf(false) }
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissAmountEditDialog() },
-            title = { Text("编辑金额") },
-            text = {
-                OutlinedTextField(
-                    value = amountText,
-                    onValueChange = {
-                        amountText = it
-                        amountError = it.toDoubleOrNull() == null || (it.toDoubleOrNull() ?: 0.0) <= 0
-                    },
-                    label = { Text("金额") },
-                    supportingText = { if (amountError) Text("请输入有效的正数金额") },
-                    isError = amountError,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val newAmount = amountText.toDoubleOrNull()
-                        if (newAmount != null && newAmount > 0) {
-                            viewModel.updateAmount(newAmount)
-                        }
-                    },
-                    enabled = !amountError && amountText.toDoubleOrNull() != null && (amountText.toDoubleOrNull() ?: 0.0) > 0
-                ) {
-                    Text("保存")
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissAmountEditDialog() }) {
-                    Text("取消")
-                }
-            }
-        )
-    }
-}
             }
         } else {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

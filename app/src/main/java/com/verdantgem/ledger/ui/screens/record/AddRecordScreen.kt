@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -40,6 +39,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.verdantgem.ledger.data.model.BrandMapping
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.domain.matcher.BrandMatcher
+import com.verdantgem.ledger.ui.components.CategoryIcon
 import com.verdantgem.ledger.ui.components.DateTimePickerDialog
 
 import com.verdantgem.ledger.ui.theme.WindowWidth
@@ -263,7 +263,8 @@ fun AddRecordScreen(
                                                     } else {
                                                         selectedSub = parent.name
                                                     }
-                                                }
+                                                },
+                                                icon = parent.icon
                                             )
                                         }
                                     }
@@ -297,7 +298,8 @@ fun AddRecordScreen(
                                                             CategoryItem(
                                                                 label = sub.name,
                                                                 isSelected = selectedSub == sub.name,
-                                                                onClick = { userTouchedCategory = true; selectedSub = sub.name }
+                                                                onClick = { userTouchedCategory = true; selectedSub = sub.name },
+                                                                icon = sub.icon
                                                             )
                                                         }
                                                     }
@@ -414,7 +416,7 @@ fun AddRecordScreen(
 }
 
 @Composable
-fun CategoryItem(label: String, isSelected: Boolean, onClick: () -> Unit) {
+fun CategoryItem(label: String, isSelected: Boolean, onClick: () -> Unit, icon: String = "default_icon") {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -423,17 +425,13 @@ fun CategoryItem(label: String, isSelected: Boolean, onClick: () -> Unit) {
             .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent)
             .padding(8.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .background(
-                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                    CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(label.take(1), color = if(isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        CategoryIcon(
+            icon = icon,
+            name = label,
+            size = 44.dp,
+            tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+        )
         Spacer(modifier = Modifier.height(4.dp))
         Text(label, fontSize = 11.sp, fontWeight = if(isSelected) FontWeight.Bold else FontWeight.Normal)
     }

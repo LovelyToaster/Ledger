@@ -17,6 +17,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.verdantgem.ledger.ui.components.CategoryIcon
+import com.verdantgem.ledger.ui.components.IconPickerDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,6 +40,8 @@ fun CategoryEditDetailScreen(
     }
 
     var name by remember(category) { mutableStateOf(category.name) }
+    var icon by remember(category) { mutableStateOf(category.icon) }
+    var showIconPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     val promptCount = remember(category) {
@@ -74,7 +78,7 @@ fun CategoryEditDetailScreen(
                 Button(
                     onClick = {
                         viewModel.updateCategory(
-                            category.copy(name = name.trim())
+                            category.copy(name = name.trim(), icon = icon)
                         )
                         onBack()
                     },
@@ -115,6 +119,58 @@ fun CategoryEditDetailScreen(
             )
 
             Spacer(modifier = Modifier.height(4.dp))
+
+            // ========== 图标选择 ==========
+            Text(
+                text = "图标",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.outline
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Surface(
+                onClick = { showIconPicker = true },
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CategoryIcon(
+                        icon = icon,
+                        name = name.ifBlank { category.name },
+                        size = 40.dp,
+                        tint = MaterialTheme.colorScheme.primary,
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "选择图标",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+
+            if (showIconPicker) {
+                IconPickerDialog(
+                    currentIcon = icon,
+                    categoryName = name.ifBlank { category.name },
+                    onIconSelected = { icon = it; showIconPicker = false },
+                    onDismiss = { showIconPicker = false }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // ========== 提示词管理入口 ==========
             Surface(

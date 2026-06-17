@@ -36,6 +36,8 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.window.Dialog
+import com.verdantgem.ledger.data.model.Category
+import com.verdantgem.ledger.ui.components.CategoryIcon
 import com.verdantgem.ledger.ui.theme.dimens
 import java.text.SimpleDateFormat
 import java.util.*
@@ -499,6 +501,7 @@ fun CategoryRankingList(
     ranking: List<CategoryRank>,
     comparisonMap: Map<String, CategoryComparisonInfo>,
     isIncome: Boolean,
+    categories: List<Category> = emptyList(),
     onCategoryClick: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -532,6 +535,11 @@ fun CategoryRankingList(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val cat = categories.firstOrNull { it.name == item.name }
+                    if (cat != null) {
+                        CategoryIcon(icon = cat.icon, name = cat.name, size = 28.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
                     Text(
                         text = item.name,
                         style = MaterialTheme.typography.bodyMedium,
@@ -642,6 +650,7 @@ fun CategoryRankingList(
                 ranking = ranking,
                 comparisonMap = comparisonMap,
                 isIncome = isCategoryIncome,
+                categories = allCategories,
                 onCategoryClick = { displayName ->
                     viewModel.skipNextReset()
                     val (startTime, endTime) = computeStatsTimeRange(mode, selectedDate)

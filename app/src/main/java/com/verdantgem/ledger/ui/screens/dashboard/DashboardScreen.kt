@@ -35,7 +35,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.paging.LoadState
@@ -46,6 +45,7 @@ import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
 import com.verdantgem.ledger.domain.matcher.BrandMatcher
 import com.verdantgem.ledger.domain.parser.SmartParser
+import com.verdantgem.ledger.ui.components.CategoryIcon
 import com.verdantgem.ledger.ui.components.DateTimePickerDialog
 import com.verdantgem.ledger.ui.components.PickerCategoryItem
 import com.verdantgem.ledger.ui.components.QuickCategoryPicker
@@ -441,13 +441,22 @@ private fun AdvancedSearchDialog(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = if (categoryName != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            if (categoryName != null) {
                                 val cat = allCategories.firstOrNull { it.name == categoryName }
-                                if (cat?.parentName != null) "${cat.parentName}-${cat.name}" else categoryName!!
-                            } else "全部",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                                if (cat != null) {
+                                    CategoryIcon(icon = cat.icon, name = cat.name, size = 24.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+                            }
+                            Text(
+                                text = if (categoryName != null) {
+                                    val cat = allCategories.firstOrNull { it.name == categoryName }
+                                    if (cat?.parentName != null) "${cat.parentName}-${cat.name}" else categoryName!!
+                                } else "全部",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                         Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
                     }
                 }
@@ -631,6 +640,7 @@ private fun GridCategoryPicker(
                                 Box(modifier = Modifier.weight(1f)) {
                                     PickerCategoryItem(
                                         label = sub.name,
+                                        icon = sub.icon,
                                         isSelected = selectedCategoryName == sub.name,
                                         onClick = { onCategoryClick(sub.name) }
                                     )
@@ -649,6 +659,7 @@ private fun GridCategoryPicker(
                         Box(modifier = Modifier.weight(1f)) {
                             PickerCategoryItem(
                                 label = parent.name,
+                                icon = parent.icon,
                                 isSelected = selectedCategoryName == parent.name,
                                 onClick = { onCategoryClick(parent.name) }
                             )
@@ -782,18 +793,14 @@ private fun QuickRecordOverlay(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        if (effectiveCategory != null) displayCatName.take(1) else "类",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                if (effectiveCategory != null) {
+                                    CategoryIcon(
+                                        icon = effectiveCategory.icon,
+                                        name = effectiveCategory.name,
+                                        size = 28.dp
                                     )
+                                } else {
+                                    CategoryIcon(icon = "default_icon", name = "类", size = 28.dp)
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
@@ -1047,10 +1054,16 @@ fun RecordItem(
                         modifier = Modifier.padding(end = 12.dp)
                     )
                 }
+                val cat = categories.find { it.name == record.categoryName }
+                val displayName = if (cat?.parentName != null) "${cat.parentName}-${cat.name}" else record.categoryName
+                CategoryIcon(
+                    icon = cat?.icon ?: "default_icon",
+                    name = cat?.name ?: record.categoryName,
+                    size = 36.dp
+                )
+                Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(text = record.note, fontWeight = FontWeight.Medium)
-                    val cat = categories.find { it.name == record.categoryName }
-                    val displayName = if (cat?.parentName != null) "${cat.parentName}-${cat.name}" else record.categoryName
                     Text(
                         text = displayName,
                         style = MaterialTheme.typography.labelSmall,

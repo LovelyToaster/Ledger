@@ -20,6 +20,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.verdantgem.ledger.data.model.Category
+import com.verdantgem.ledger.ui.components.CategoryIcon
+import com.verdantgem.ledger.ui.components.IconPickerDialog
 import com.verdantgem.ledger.ui.theme.WindowWidth
 import com.verdantgem.ledger.ui.theme.dimens
 import com.verdantgem.ledger.ui.theme.windowSize
@@ -30,13 +32,15 @@ fun CategoryEditScreen(
     onBack: () -> Unit,
     categories: List<Category>,
     viewModel: CategoryViewModel,
-    onAdd: (String, String?, Boolean) -> Unit,
+    onAdd: (String, String?, Boolean, String) -> Unit,
     onNavigateToDetail: (Long) -> Unit,
     onDelete: (Category) -> Unit,
     onReset: () -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
+    var newIcon by remember { mutableStateOf("default_icon") }
+    var showIconPicker by remember { mutableStateOf(false) }
     var currentTabIsIncome by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
     val d = MaterialTheme.dimens
@@ -153,7 +157,7 @@ fun CategoryEditScreen(
                     gridColumns = gridColumns,
                     expanded = parent.id in expandedParentIds,
                     onToggle = { viewModel.toggleExpand(parent.id) },
-                    onAddSub = { subName -> onAdd(subName, parent.name, currentTabIsIncome) },
+                    onAddSub = { subName -> onAdd(subName, parent.name, currentTabIsIncome, "default_icon") },
                     onNavigateToDetail = onNavigateToDetail,
                     onDelete = onDelete
                 )
@@ -163,29 +167,60 @@ fun CategoryEditScreen(
 
     if (showAddDialog) {
         AlertDialog(
-            onDismissRequest = { showAddDialog = false },
+            onDismissRequest = {
+                newIcon = "default_icon"
+                showAddDialog = false
+            },
             title = { Text("添加分类") },
             text = {
-                TextField(
-                    value = newName,
-                    onValueChange = { newName = it },
-                    label = { Text("分类名称") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+                Column {
+                    TextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("分类名称") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { showIconPicker = true }.padding(4.dp)
+                    ) {
+                        CategoryIcon(
+                            icon = newIcon,
+                            name = newName.ifBlank { "新分类" },
+                            size = 32.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("选择图标", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
                     if (newName.isNotBlank()) {
-                        onAdd(newName, null, currentTabIsIncome)
+                        onAdd(newName, null, currentTabIsIncome, newIcon)
                         newName = ""
+                        newIcon = "default_icon"
                         showAddDialog = false
                     }
                 }) { Text("确定") }
             },
             dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) { Text("取消") }
+                TextButton(onClick = {
+                    newIcon = "default_icon"
+                    showAddDialog = false
+                }) { Text("取消") }
             }
+        )
+    }
+
+    if (showIconPicker) {
+        IconPickerDialog(
+            currentIcon = newIcon,
+            categoryName = newName.ifBlank { "新分类" },
+            onIconSelected = { newIcon = it; showIconPicker = false },
+            onDismiss = { showIconPicker = false }
         )
     }
 
@@ -240,11 +275,12 @@ fun CategoryGroup(
                         contentDescription = null
                     )
                 }
-                Icon(
-                    Icons.Default.Category,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                CategoryIcon(
+                    icon = parent.icon,
+                    name = parent.name,
+                    size = 24.dp,
+                    tint = MaterialTheme.colorScheme.primary,
+                    containerColor = Color.Transparent
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
@@ -289,6 +325,7 @@ fun CategoryGroup(
                                 Box(modifier = Modifier.weight(1f)) {
                                     CategoryItem(
                                         label = sub.name,
+                                        icon = sub.icon,
                                         isSelected = false,
                                         onClick = { onNavigateToDetail(sub.id) }
                                     )
