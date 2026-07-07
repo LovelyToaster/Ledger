@@ -12,7 +12,12 @@ import javax.inject.Inject
 
 enum class StatsMode { RECENT, MONTH, YEAR }
 
-data class CategoryRank(val name: String, val amount: Float, val percentage: Float)
+data class CategoryRank(
+    val name: String,
+    val amount: Float,
+    val percentage: Float,
+    val icon: String = ""
+)
 
 data class CategoryComparisonInfo(
     val changeAmount: Float,
@@ -229,10 +234,18 @@ class StatisticsViewModel @Inject constructor(
             .mapValues { it.value.sumOf { r -> r.amount }.toFloat() }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
-    val categoryRanking: StateFlow<List<CategoryRank>> = categoryDistribution.map { map ->
+    val categoryRanking: StateFlow<List<CategoryRank>> = combine(categoryDistribution, allCategories) { map, categories ->
+        val iconMap = categories.associate { it.name to it.icon }
         val total = map.values.sum()
         map.entries
-            .map { CategoryRank(it.key, it.value, if (total > 0f) it.value / total else 0f) }
+            .map {
+                CategoryRank(
+                    name = it.key,
+                    amount = it.value,
+                    percentage = if (total > 0f) it.value / total else 0f,
+                    icon = iconMap[it.key] ?: ""
+                )
+            }
             .sortedByDescending { it.amount }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -289,6 +302,7 @@ class StatisticsViewModel @Inject constructor(
         val parentMap = if (showDetail) {
             categories.filter { it.parentName != null }.associate { it.name to it.parentName!! }
         } else emptyMap()
+        val iconMap = categories.associate { it.name to it.icon }
         val total = map.values.sum()
         map.entries
             .map {
@@ -296,7 +310,12 @@ class StatisticsViewModel @Inject constructor(
                     val parent = parentMap[it.key]
                     if (parent != null) "$parent-${it.key}" else it.key
                 } else it.key
-                CategoryRank(name, it.value, if (total > 0f) it.value / total else 0f)
+                CategoryRank(
+                    name = name,
+                    amount = it.value,
+                    percentage = if (total > 0f) it.value / total else 0f,
+                    icon = iconMap[it.key] ?: ""
+                )
             }
             .sortedByDescending { it.amount }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

@@ -536,8 +536,10 @@ fun CategoryRankingList(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val cat = categories.firstOrNull { it.name == item.name }
-                    if (cat != null) {
-                        CategoryIcon(icon = cat.icon, name = cat.name, size = 28.dp)
+                    val displayIcon = item.icon.ifBlank { cat?.icon ?: "" }
+                    val hasIcon = displayIcon.isNotBlank() && displayIcon != "default_icon"
+                    if (hasIcon || cat != null) {
+                        CategoryIcon(icon = displayIcon, name = item.name, size = 28.dp)
                         Spacer(modifier = Modifier.width(8.dp))
                     }
                     Text(
