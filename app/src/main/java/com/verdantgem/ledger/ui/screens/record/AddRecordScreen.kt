@@ -101,21 +101,7 @@ fun AddRecordScreen(
     var userTouchedCategory by remember { mutableStateOf(false) }
     val noteMatchedCategory = remember(note, allCategories, allBrandMappings) {
         val parsedNote = note.trim().takeIf { it.isNotEmpty() } ?: return@remember null
-        val incomeCats = allCategories.filter { it.isIncome }
-        val expenseCats = allCategories.filter { !it.isIncome }
-        val incomeMatch = BrandMatcher.matchNote(parsedNote, incomeCats, allBrandMappings)
-        val expenseMatch = BrandMatcher.matchNote(parsedNote, expenseCats, allBrandMappings)
-        val note2 = parsedNote
-        when {
-            incomeMatch != null && expenseMatch != null -> {
-                if (incomeMatch.name == note2 || incomeMatch.prompts.contains(note2)) incomeMatch
-                else if (expenseMatch.name == note2 || expenseMatch.prompts.contains(note2)) expenseMatch
-                else expenseMatch
-            }
-            incomeMatch != null -> incomeMatch
-            expenseMatch != null -> expenseMatch
-            else -> null
-        }
+        BrandMatcher.matchBest(parsedNote, allCategories, allBrandMappings)
     }
     LaunchedEffect(noteMatchedCategory) {
         if (!userTouchedCategory && noteMatchedCategory != null) {

@@ -2,7 +2,7 @@
 
 ## 项目信息
 - 包名：`com.verdantgem.ledger`
-- 当前版本：1.5.4（versionCode = 18）
+- 当前版本：1.6.0（versionCode = 19）
 - 技术栈：Kotlin + Jetpack Compose + Hilt + Room + Paging 3 + OkHttp + Apache POI (XLS)
 - 最低 SDK：34 (Android 14)
 - 目标 SDK：36 (Android 16)
@@ -143,7 +143,12 @@
 ## 快速记账类别选择
 - **类别选择**：`QuickRecordOverlay` 内部使用 `QuickCategoryPicker`（位于 `ui/components/QuickCategoryPicker.kt`，在 DashboardScreen 和 RecordDetailScreen 间复用），显示父类别为标签头、子类别为平铺网格（4列）
 - **手动类别优先**：类别 Chip 显示优先使用 `selectedCategory`（手动选择），回退到 `matchedCategory`（文本解析）
-- **匹配算法**：精确匹配名称 → 精确匹配 prompts → 包含匹配 prompts → 名称包含匹配；收入/支出类别各自匹配，若同时匹配到则返回收入
+- **匹配引擎**：`BrandMatcher.matchBest(note, allCategories, brandMappings)` 统一入口，内部对收入/支出候选分别匹配后按命中层级择优（层级相同时优先支出）。五级优先级（数字越小越精确）：
+  1. Category.name 精确
+  2. 品牌映射精确（confirmCount ≥ 3，用户维护的品牌优先于内置 prompts）
+  3. Category.prompts 精确
+  4. 品牌映射包含（如"蜜雪冰城 柠檬水"命中品牌"蜜雪冰城"）
+  5. Category.prompts 单向包含（仅 `note.contains(prompt)`，避免短 note 反向命中长 prompt）
 
 ## 高级记账（AddRecordScreen）自动选择类别
 - **自动匹配**：监听 `note` 字段变化，复用与快速记账相同的类别匹配算法，自动设置 `selectedSub` 和 `expandedParent`，并联动切换 `isIncome`

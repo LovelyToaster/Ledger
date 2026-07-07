@@ -698,20 +698,7 @@ private fun QuickRecordOverlay(
 
     val matchedCategory = remember(parsedNote, categories, brandMappings) {
         parsedNote?.let { note ->
-            val incomeCats = categories.filter { it.isIncome }
-            val expenseCats = categories.filter { !it.isIncome }
-            val incomeMatch = BrandMatcher.matchNote(note, incomeCats, brandMappings)
-            val expenseMatch = BrandMatcher.matchNote(note, expenseCats, brandMappings)
-            when {
-                incomeMatch != null && expenseMatch != null -> {
-                    if (incomeMatch.name == note || incomeMatch.prompts.contains(note)) incomeMatch
-                    else if (expenseMatch.name == note || expenseMatch.prompts.contains(note)) expenseMatch
-                    else expenseMatch
-                }
-                incomeMatch != null -> incomeMatch
-                expenseMatch != null -> expenseMatch
-                else -> null
-            }
+            BrandMatcher.matchBest(note, categories, brandMappings)
         }
     }
     val selectedMatched = remember(selectedCategory, categories) {
