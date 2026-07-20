@@ -1,5 +1,6 @@
 package com.verdantgem.ledger.data.repository
 
+import android.content.Context
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
@@ -7,14 +8,20 @@ import com.verdantgem.ledger.data.local.BrandMappingDao
 import com.verdantgem.ledger.data.local.BudgetDao
 import com.verdantgem.ledger.data.local.CategoryDao
 import com.verdantgem.ledger.data.local.RecordDao
+import com.verdantgem.ledger.data.local.SyncChangeLog
+import com.verdantgem.ledger.data.local.SyncChangeLogDao
 import com.verdantgem.ledger.data.model.BrandMapping
 import com.verdantgem.ledger.data.model.Budget
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
 import com.verdantgem.ledger.data.DataChangeNotifier
 import com.verdantgem.ledger.data.remote.AddressResult
+import com.verdantgem.ledger.data.remote.SyncRecord
+import com.verdantgem.ledger.data.remote.toSync
 import com.verdantgem.ledger.domain.parser.SmartParser
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,14 +31,84 @@ class LedgerRepository @Inject constructor(
     private val categoryDao: CategoryDao,
     private val budgetDao: BudgetDao,
     private val brandMappingDao: BrandMappingDao,
-    private val changeNotifier: DataChangeNotifier
+    private val changeNotifier: DataChangeNotifier,
+    private val syncChangeLogDao: SyncChangeLogDao,
+    @ApplicationContext private val context: Context
 ) {
+    private val prefs = context.getSharedPreferences("ledger_settings", Context.MODE_PRIVATE)
+    private val deviceId: String by lazy {
+        var id = prefs.getString("device_id", null)
+        if (id == null) {
+            id = UUID.randomUUID().toString()
+            prefs.edit().putString("device_id", id).apply()
+        }
+        id
+    }
     val allRecords: Flow<List<Record>> = recordDao.getAllRecords()
     val allCategories: Flow<List<Category>> = categoryDao.getAllCategories()
     val allBrandMappings: Flow<List<BrandMapping>> = brandMappingDao.getAllMappings()
 
     val totalExpenseFlow: Flow<Double> = recordDao.getTotalExpenseFlow()
     val totalIncomeFlow: Flow<Double> = recordDao.getTotalIncomeFlow()
+
+    private val syncJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+    private fun buildLogEntry(entity: String, uuid: String, operation: String, data: String, changedAt: Long): SyncChangeLog {
+        return SyncChangeLog(
+            seq = 0,
+            entity = entity,
+            uuid = uuid,
+            operation = operation,
+            data = data,
+            changedAt = changedAt,
+            deviceId = deviceId
+        )
+    }
+
+    private suspend fun logRecordChange(record: com.verdantgem.ledger.data.model.Record, operation: String) {
+        try {
+            val syncRecord = record.toSync()
+            val jsonStr = syncJson.encodeToString(
+                com.verdantgem.ledger.data.remote.SyncRecord.serializer(),
+                syncRecord
+            )
+            syncChangeLogDao.appendNext(
+                buildLogEntry("record", record.syncUuid, operation, jsonStr, record.updatedAt)
+            )
+        } catch (e: Exception) {
+            // 日志写入失败不阻断业务操作
+        }
+    }
+
+    private suspend fun logCategoryChange(category: com.verdantgem.ledger.data.model.Category, operation: String) {
+        try {
+            val syncCat = category.toSync()
+            val jsonStr = syncJson.encodeToString(
+                com.verdantgem.ledger.data.remote.SyncCategory.serializer(),
+                syncCat
+            )
+            syncChangeLogDao.appendNext(
+                buildLogEntry("category", category.syncUuid, operation, jsonStr, category.updatedAt)
+            )
+        } catch (e: Exception) {
+            // 日志写入失败不阻断业务操作
+        }
+    }
+
+    private suspend fun logBudgetChange(budget: com.verdantgem.ledger.data.model.Budget, operation: String) {
+        try {
+            val syncBudget = budget.toSync()
+            val jsonStr = syncJson.encodeToString(
+                com.verdantgem.ledger.data.remote.SyncBudget.serializer(),
+                syncBudget
+            )
+            syncChangeLogDao.appendNext(
+                buildLogEntry("budget", budget.syncUuid, operation, jsonStr, budget.updatedAt)
+            )
+        } catch (e: Exception) {
+            // 日志写入失败不阻断业务操作
+        }
+    }
 
     fun getRecordsPaged(
         query: String = "",
@@ -82,7 +159,13 @@ class LedgerRepository @Inject constructor(
 
     suspend fun deleteRecordsByIds(ids: Set<Long>) {
         val now = System.currentTimeMillis()
-        ids.forEach { recordDao.softDeleteRecord(it, now) }
+        ids.forEach { id ->
+            val entity = recordDao.getRecordById(id)
+            if (entity != null) {
+                logRecordChange(entity.copy(deleted = true, updatedAt = now), "delete")
+            }
+            recordDao.softDeleteRecord(id, now)
+        }
         changeNotifier.notifyChange()
     }
 
@@ -93,7 +176,7 @@ class LedgerRepository @Inject constructor(
 
     suspend fun saveRecordWithFallback(amount: Double, note: String, categoryNameInput: String?, isIncome: Boolean, addressResult: AddressResult? = null, billDate: Long = System.currentTimeMillis()): Boolean {
         val cat = categoryNameInput?.let { categoryDao.getCategoryByName(it) } ?: return false
-        recordDao.insertRecord(Record(
+        val id = recordDao.insertRecord(Record(
             amount = amount,
             note = note,
             categoryId = cat.id,
@@ -103,33 +186,60 @@ class LedgerRepository @Inject constructor(
             latitude = addressResult?.latitude,
             longitude = addressResult?.longitude
         ))
+        val fullRecord = recordDao.getRecordById(id)
+        if (fullRecord != null) {
+            logRecordChange(fullRecord, "upsert")
+        }
         changeNotifier.notifyChange()
         return true
     }
 
     suspend fun insertRecord(record: Record): Long {
         val id = recordDao.insertRecord(record)
+        val fullRecord = recordDao.getRecordById(id)
+        if (fullRecord != null) {
+            logRecordChange(fullRecord, "upsert")
+        }
         changeNotifier.notifyChange()
         return id
     }
 
     suspend fun softDeleteRecord(record: Record) {
+        val entity = recordDao.getRecordById(record.id)
+        if (entity != null) {
+            logRecordChange(entity.copy(deleted = true, updatedAt = System.currentTimeMillis()), "delete")
+        }
         recordDao.softDeleteRecord(record.id)
         changeNotifier.notifyChange()
     }
 
     suspend fun addCategory(category: Category) {
+        val existed = categoryDao.getCategoryByName(category.name)
         categoryDao.insertCategories(listOf(category))
+        val inserted = categoryDao.getCategoryByName(category.name)
+        // 仅当分类此前不存在（即本次为真正新增）时才记录 upsert 日志
+        // 若已存在，insertCategories 的 IGNORE 策略会静默跳过，不应产生虚假变更
+        if (inserted != null && existed == null) {
+            logCategoryChange(inserted, "upsert")
+        }
         changeNotifier.notifyChange()
     }
 
     suspend fun softDeleteCategory(category: Category) {
+        val entity = categoryDao.getCategoryById(category.id)
+        if (entity != null) {
+            logCategoryChange(entity.copy(deleted = true, updatedAt = System.currentTimeMillis()), "delete")
+        }
         categoryDao.softDeleteCategory(category.id)
         changeNotifier.notifyChange()
     }
 
     suspend fun updateCategory(category: Category) {
         categoryDao.updateCategory(category)
+        val fullCat = categoryDao.getCategoryById(category.id)
+        if (fullCat != null) {
+            logCategoryChange(fullCat, "upsert")
+        }
         changeNotifier.notifyChange()
     }
 
@@ -143,30 +253,54 @@ class LedgerRepository @Inject constructor(
 
     suspend fun updateRecordBillDate(id: Long, billDate: Long) {
         recordDao.updateBillDate(id, billDate)
+        val fullRecord = recordDao.getRecordById(id)
+        if (fullRecord != null) {
+            logRecordChange(fullRecord, "upsert")
+        }
         changeNotifier.notifyChange()
     }
 
     suspend fun updateRecordNote(id: Long, note: String) {
         recordDao.updateRecordNote(id, note)
+        val fullRecord = recordDao.getRecordById(id)
+        if (fullRecord != null) {
+            logRecordChange(fullRecord, "upsert")
+        }
         changeNotifier.notifyChange()
     }
 
     suspend fun updateRecordCategory(id: Long, categoryId: Long, categoryName: String) {
         recordDao.updateRecordCategory(id, categoryId, categoryName)
+        val fullRecord = recordDao.getRecordById(id)
+        if (fullRecord != null) {
+            logRecordChange(fullRecord, "upsert")
+        }
         changeNotifier.notifyChange()
     }
 
     suspend fun updateRecordAmount(id: Long, amount: Double) {
         recordDao.updateRecordAmount(id, amount)
+        val fullRecord = recordDao.getRecordById(id)
+        if (fullRecord != null) {
+            logRecordChange(fullRecord, "upsert")
+        }
         changeNotifier.notifyChange()
     }
 
     suspend fun saveBudget(amount: Double) {
         budgetDao.upsertBudget(Budget(monthlyAmount = amount))
+        val budget = budgetDao.getBudgetForSync()
+        if (budget != null) {
+            logBudgetChange(budget, "upsert")
+        }
         changeNotifier.notifyChange()
     }
 
     suspend fun clearBudget() {
+        val budget = budgetDao.getBudgetForSync()
+        if (budget != null) {
+            logBudgetChange(budget.copy(deleted = true, updatedAt = System.currentTimeMillis()), "delete")
+        }
         budgetDao.softDeleteBudget()
         changeNotifier.notifyChange()
     }
@@ -180,12 +314,19 @@ class LedgerRepository @Inject constructor(
     suspend fun insertRecords(records: List<Record>, onProgress: (Int) -> Unit = {}): Int {
         var count = 0
         val total = records.size
+        val logEntries = mutableListOf<SyncChangeLog>()
         for (record in records) {
-            recordDao.insertRecord(record)
+            val id = recordDao.insertRecord(record)
+            val fullRecord = record.copy(id = id)
+            val jsonStr = syncJson.encodeToString(SyncRecord.serializer(), fullRecord.toSync())
+            logEntries.add(buildLogEntry("record", fullRecord.syncUuid, "upsert", jsonStr, fullRecord.updatedAt))
             count++
             if (count % 50 == 0 || count == total) {
                 onProgress(count)
             }
+        }
+        if (logEntries.isNotEmpty()) {
+            try { syncChangeLogDao.appendAll(logEntries) } catch (_: Exception) {}
         }
         if (count > 0) changeNotifier.notifyChange()
         return count
@@ -296,6 +437,7 @@ class LedgerRepository @Inject constructor(
         categoryDao.insertCategories(DefaultCategories.getAll())
         brandMappingDao.deleteAll()
         seedBrandMappings()
+        changeNotifier.notifyChange()
     }
 
     suspend fun getAllRecordsForSync(): List<Record> = recordDao.getAllRecordsForSync()

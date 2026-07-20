@@ -7,6 +7,7 @@ import com.verdantgem.ledger.data.local.BudgetDao
 import com.verdantgem.ledger.data.local.CategoryDao
 import com.verdantgem.ledger.data.local.LedgerDatabase
 import com.verdantgem.ledger.data.local.RecordDao
+import com.verdantgem.ledger.data.local.SyncChangeLogDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -36,7 +37,9 @@ object DatabaseModule {
             LedgerDatabase.MIGRATION_8_9,
             LedgerDatabase.MIGRATION_9_10,
             LedgerDatabase.MIGRATION_10_11,
-            LedgerDatabase.MIGRATION_11_12
+            LedgerDatabase.MIGRATION_11_12,
+            LedgerDatabase.MIGRATION_12_13,
+            LedgerDatabase.MIGRATION_13_14
         ).build()
     }
 
@@ -58,5 +61,10 @@ object DatabaseModule {
     @Provides
     fun provideBrandMappingDao(database: LedgerDatabase): BrandMappingDao {
         return database.brandMappingDao()
+    }
+
+    @Provides
+    fun provideSyncChangeLogDao(database: LedgerDatabase): SyncChangeLogDao {
+        return database.syncChangeLogDao()
     }
 }

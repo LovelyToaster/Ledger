@@ -9,12 +9,13 @@ import com.verdantgem.ledger.data.model.Budget
 import com.verdantgem.ledger.data.model.Category
 import com.verdantgem.ledger.data.model.Record
 
-@Database(entities = [Category::class, Record::class, Budget::class, BrandMapping::class], version = 12, exportSchema = false)
+@Database(entities = [Category::class, Record::class, Budget::class, BrandMapping::class, SyncChangeLog::class], version = 14, exportSchema = false)
 abstract class LedgerDatabase : RoomDatabase() {
     abstract fun recordDao(): RecordDao
     abstract fun categoryDao(): CategoryDao
     abstract fun budgetDao(): BudgetDao
     abstract fun brandMappingDao(): BrandMappingDao
+    abstract fun syncChangeLogDao(): SyncChangeLogDao
 
     companion object {
         const val DATABASE_NAME = "ledger_db"
@@ -94,6 +95,30 @@ abstract class LedgerDatabase : RoomDatabase() {
             // 已有映射全部设 confirmCount=3（保持有效），missCount=0
             db.execSQL("ALTER TABLE brand_mappings ADD COLUMN confirmCount INTEGER NOT NULL DEFAULT 3")
             db.execSQL("ALTER TABLE brand_mappings ADD COLUMN missCount INTEGER NOT NULL DEFAULT 0")
+        }
+
+        val MIGRATION_12_13 = Migration(12, 13) { db ->
+            db.execSQL("""
+                CREATE TABLE sync_change_log (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    seq INTEGER NOT NULL,
+                    entity TEXT NOT NULL,
+                    uuid TEXT NOT NULL,
+                    operation TEXT NOT NULL,
+                    data TEXT NOT NULL,
+                    changedAt INTEGER NOT NULL,
+                    deviceId TEXT NOT NULL,
+                    synced INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+            db.execSQL("CREATE INDEX index_sync_change_log_seq ON sync_change_log(seq)")
+            db.execSQL("CREATE INDEX index_sync_change_log_synced ON sync_change_log(synced)")
+        }
+
+        val MIGRATION_13_14 = Migration(13, 14) { db ->
+            // 为 sync_change_log.seq 增加 UNIQUE 约束作为并发兜底
+            db.execSQL("DROP INDEX IF EXISTS index_sync_change_log_seq")
+            db.execSQL("CREATE UNIQUE INDEX index_sync_change_log_seq ON sync_change_log(seq)")
         }
     }
 }

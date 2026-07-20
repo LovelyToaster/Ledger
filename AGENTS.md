@@ -2,7 +2,7 @@
 
 ## 项目信息
 - 包名：`com.verdantgem.ledger`
-- 当前版本：1.6.0（versionCode = 19）
+- 当前版本：1.6.2（versionCode = 21）
 - 技术栈：Kotlin + Jetpack Compose + Hilt + Room + Paging 3 + OkHttp + Apache POI (XLS)
 - 最低 SDK：34 (Android 14)
 - 目标 SDK：36 (Android 16)
@@ -18,7 +18,7 @@
 - **定位服务**：`LocationProvider`（Hilt `@Singleton`），`getAddress()` 每次调用创建/销毁 `AMapLocationClient`，`finally` 中确保 `onDestroy()` 释放系统连接
 - **生命周期**：进入记账界面 → `startLocation()` → 定位完成自动 `onDestroy()`；退出界面 → `DisposableEffect.onDispose` / `onCleared` → `stopLocation()` 取消 job；保存前 `locationJob?.join()` 等待定位完成
 - **防重复**：`startLocation()` 有双重 guard — 已有有效地址不重复获取，已有正在执行的 job 不重复启动
-- **数据库版本**：v11（`MIGRATION_4_5` 新增 `updatedAt`、`deleted` 字段；`MIGRATION_5_6` 新增 `excludeFromBudget` 字段；`MIGRATION_6_7` 新增 `syncUuid` 全局唯一标识字段；`MIGRATION_7_8` 新增 `brand_mappings` 品牌映射表；`MIGRATION_8_9` 修复索引名；`MIGRATION_9_10` 移除 `excludeFromBudget` 列；`MIGRATION_10_11` 清理因跨设备 UUID 不一致导致的重复类别行）
+- **数据库版本**：v14（`MIGRATION_4_5` ~ `MIGRATION_10_11`；`MIGRATION_11_12` 新增 `confirmCount`/`missCount` 字段；`MIGRATION_12_13` 新增 `sync_change_log` 表；`MIGRATION_13_14` `seq` 列改为 UNIQUE 索引）
 - **RecordDetailScreen**：仍然显示已保存的 `Record.address` 字段（若有）；支持编辑金额/备注/类别
 
 ## 预算功能

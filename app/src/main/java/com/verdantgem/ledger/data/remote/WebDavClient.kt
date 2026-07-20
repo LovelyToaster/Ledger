@@ -191,4 +191,32 @@ class WebDavClient @Inject constructor() {
             }
         }
     }
+
+    /**
+     * 带 ETag 乐观锁的上传。用于 manifest.json 的并发安全更新。
+     * 若远程文件已变更（412 Precondition Failed），返回失败。
+     */
+    suspend fun backupWithEtag(
+        url: String,
+        user: String,
+        pass: String,
+        file: java.io.File,
+        etag: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val credential = Credentials.basic(user, pass)
+            val request = Request.Builder()
+                .url(url)
+                .put(file.asRequestBody("application/octet-stream".toMediaTypeOrNull()))
+                .header("Authorization", credential)
+                .header("If-Match", etag)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw Exception("Upload with If-Match failed: ${response.code}")
+                }
+            }
+        }
+    }
 }
