@@ -19,4 +19,5 @@
 -keepclassmembers class com.verdantgem.ledger.data.remote.SyncManifest { <fields>; }
 -keepclassmembers class com.verdantgem.ledger.data.remote.DeviceState { <fields>; }
 -keepclassmembers class com.verdantgem.ledger.data.remote.SyncChangeBatch { <fields>; }
+-keepclassmembers class com.verdantgem.ledger.data.remote.BatchFile { <fields>; }
 -keepclassmembers class com.verdantgem.ledger.data.local.SyncChangeLog { <fields>; }

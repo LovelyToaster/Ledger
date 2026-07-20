@@ -456,7 +456,18 @@ class SyncManager @Inject constructor(
             )
 
             val batchJsonStr = batchJson.encodeToString(SyncChangeBatch.serializer(), batch)
-            val compressed = compress(batchJsonStr)
+
+            // 批次加密/压缩包装
+            val batchFile = if (!cryptoPassword.isNullOrBlank()) {
+                val compressedInner = compress(batchJsonStr)
+                val compressedBase64 = Base64.getEncoder().encodeToString(compressedInner)
+                val ciphertext = cryptoManager.encrypt(compressedBase64, cryptoPassword)
+                BatchFile(encrypted = true, ciphertext = ciphertext)
+            } else {
+                BatchFile(data = batchJsonStr)
+            }
+            val outputJson = json.encodeToString(BatchFile.serializer(), batchFile)
+            val compressed = compress(outputJson)
 
             val tempFile = File(context.cacheDir, "sync_batch_temp")
             try {
@@ -602,7 +613,16 @@ class SyncManager @Inject constructor(
                     }
 
                     val compressed = tempFile.readBytes()
-                    val batchJsonStr = decompress(compressed)
+                    val rawJson = decompress(compressed)
+                    val batchFile = batchJson.decodeFromString<BatchFile>(rawJson)
+                    val batchJsonStr = if (batchFile.encrypted) {
+                        if (cryptoPassword.isNullOrBlank()) break
+                        val decrypted = cryptoManager.decrypt(batchFile.ciphertext, cryptoPassword)
+                        val compressedInner = Base64.getDecoder().decode(decrypted)
+                        decompress(compressedInner)
+                    } else {
+                        batchFile.data ?: break
+                    }
                     val batch = batchJson.decodeFromString<SyncChangeBatch>(batchJsonStr)
 
                     mergeChangeBatch(

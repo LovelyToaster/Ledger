@@ -15,3 +15,13 @@ data class SyncChangeBatch(
     @SerialName("categories") val categories: List<SyncCategory> = emptyList(),
     @SerialName("budgets") val budgets: List<SyncBudget> = emptyList()
 )
+
+/**
+ * 批次文件外层包装，支持可选加密（与 SyncFile 同模式）
+ */
+@Serializable
+data class BatchFile(
+    @SerialName("e") val encrypted: Boolean = false,
+    @SerialName("d") val data: String? = null,
+    @SerialName("c") val ciphertext: String = ""
+)
