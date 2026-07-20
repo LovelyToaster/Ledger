@@ -47,7 +47,7 @@ import com.verdantgem.ledger.domain.matcher.BrandMatcher
 import com.verdantgem.ledger.domain.parser.SmartParser
 import com.verdantgem.ledger.ui.components.CategoryIcon
 import com.verdantgem.ledger.ui.components.DateTimePickerDialog
-import com.verdantgem.ledger.ui.components.PickerCategoryItem
+import com.verdantgem.ledger.ui.components.ExpandableCategoryGrid
 import com.verdantgem.ledger.ui.components.QuickCategoryPicker
 import com.verdantgem.ledger.ui.theme.dimens
 import kotlinx.coroutines.delay
@@ -589,89 +589,17 @@ private fun GridCategoryPicker(
     onCategoryClick: (String) -> Unit
 ) {
     var pickerIsIncome by remember { mutableStateOf(false) }
-    val parents = categories.filter { it.isIncome == pickerIsIncome && it.parentName == null }
-    val gridColumns = 4
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            FilterChip(
-                selected = !pickerIsIncome,
-                onClick = { pickerIsIncome = false },
-                label = { Text("支出") },
-                modifier = Modifier.weight(1f)
-            )
-            FilterChip(
-                selected = pickerIsIncome,
-                onClick = { pickerIsIncome = true },
-                label = { Text("收入") },
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 250.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            parents.forEach { parent ->
-                val subs = categories.filter { it.parentName == parent.name }
-
-                Text(
-                    text = parent.name,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
-                )
-
-                if (subs.isNotEmpty()) {
-                    subs.chunked(gridColumns).forEach { row ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            row.forEach { sub ->
-                                Box(modifier = Modifier.weight(1f)) {
-                                    PickerCategoryItem(
-                                        label = sub.name,
-                                        icon = sub.icon,
-                                        isSelected = selectedCategoryName == sub.name,
-                                        onClick = { onCategoryClick(sub.name) }
-                                    )
-                                }
-                            }
-                            repeat(gridColumns - row.size) {
-                                Spacer(modifier = Modifier.weight(1f))
-                            }
-                        }
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Start
-                    ) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            PickerCategoryItem(
-                                label = parent.name,
-                                icon = parent.icon,
-                                isSelected = selectedCategoryName == parent.name,
-                                onClick = { onCategoryClick(parent.name) }
-                            )
-                        }
-                        repeat(gridColumns - 1) {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
-            }
-        }
-    }
+    ExpandableCategoryGrid(
+        categories = categories,
+        selectedCategoryName = selectedCategoryName ?: "",
+        onCategoryClick = onCategoryClick,
+        isIncome = pickerIsIncome,
+        onIsIncomeChange = { pickerIsIncome = it },
+        showIncomeToggle = true,
+        gridColumns = 4,
+        maxHeight = 250.dp,
+    )
 }
 
 @Composable
