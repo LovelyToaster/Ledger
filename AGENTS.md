@@ -2,7 +2,7 @@
 
 ## 项目信息
 - 包名：`com.verdantgem.ledger`
-- 当前版本：1.6.2（versionCode = 21）
+- 当前版本：1.6.3（versionCode = 22）
 - 技术栈：Kotlin + Jetpack Compose + Hilt + Room + Paging 3 + OkHttp + Apache POI (XLS)
 - 最低 SDK：34 (Android 14)
 - 目标 SDK：36 (Android 16)
@@ -59,16 +59,17 @@
 - `kotlinx-serialization-json:1.7.3` — JSON 序列化同步快照
 - `androidx.lifecycle:lifecycle-process:2.7.0` — ProcessLifecycleOwner 监听后台事件
 
-### 同步策略：Last-Write-Wins 增量合并
-- 导出全量数据为 JSON 快照，上传到 WebDAV 的 `简记账/{用户名}/ledger_sync.json`
-- 下载远程快照，逐实体比对 `updatedAt`，时间戳较新的覆盖
-- **身份匹配**：使用 `syncUuid`（UUID 字符串）而非本地自增 `id` 进行跨设备实体匹配
-- `insertRecordForSync`/`upsertCategoryForSync`/`upsertBudgetForSync` 先按 `syncUuid` 查找已有记录，存在则保留本地 `id` 更新内容，不存在则新建
-- **ID 回退匹配安全限制**：`mergeSnapshot` 和 Repository 层的 ID 回退匹配（`getRecordById`/`getCategoryById`）必须增加守卫条件 `byId.syncUuid.isBlank() || byId.syncUuid == remote.syncUuid`。因为 `id` 是本地自增主键，不同设备上的不同记录可能拥有相同 `id`，不加校验会导致跨设备记录被误匹配覆盖。
-- 使用 `kotlinx.serialization` 格式化，Hilt `@Singleton` 管理状态
+### 同步策略：PROPFIND 发现 + Last-Write-Wins 增量合并
+- 无中心协调文件，通过 PROPFIND 列出 `changes/` 目录发现各设备及批次，列出根目录发现快照基线
+- 每设备在自己的 `changes/{deviceId}/` 下写入不可变批次文件 `{batchNum}.json.gz`，永不修改其他设备的文件
+- 本地通过 `sync_change_log` 表追踪数据变更（`synced=0` 表示待推送），push 时读取后上传批次并标记已同步
+- pull 时 PROPFIND 发现其他设备的新批次，逐批下载 → 解压 → 解密 → 合并
+- 定期压缩：批次累积 ≥ 200 条时，从本地构建全量快照 `snapshot_{seq}.json.gz` 上传为基线，清除本设备旧批次
+- 合并策略：以 `syncUuid` 匹配实体，`updatedAt` 最新者胜（Last-Write-Wins）
+- **ID 回退匹配安全限制**：`mergeSnapshot` 和 `mergeChangeBatch` 中的 ID 回退匹配（`recordsById[remote.id]`）必须增加守卫条件 `byId.syncUuid.isBlank() || byId.syncUuid == remote.syncUuid`。因为 `id` 是本地自增主键，不同设备上的不同记录可能拥有相同 `id`，不加校验会导致跨设备记录被误匹配覆盖。
 
 ### 流量优化
-- **ETag 条件下载**：`WebDavClient.head()` 获取远程文件 ETag，与本地缓存比对，相同则跳过下载
+- **PROPFIND 发现**：通过 `listFiles()` 列出远程目录，直接发现设备、批次和快照序号，无需额外元数据文件
 - **dirty 增量上传**：`fullSync()` 中 `push()` 前检查 `AtomicBoolean dirty`，本地无变更则跳过上传
 - **传输层 Gzip 压缩**：`SyncFile` 外层整个 JSON 文件 gzip 压缩后上传，魔数检测兼容旧格式
 - **加密内层压缩**：启用加密时，先 gzip 压缩 snapshot JSON 再加密（`SyncFile.z = true`），避免 AES-GCM 密文无法被外层 gzip 压缩的问题；解密时检测 `z` 标记自动解压
@@ -116,11 +117,14 @@
 |------|------|
 | `data/remote/WebDavClient.kt` | 封装 OKHttp WebDAV 操作（PUT/GET/HEAD/PROPFIND/DELETE/MKCOL）；`testConnection()` 先 MKCOL 创建 `简记账/` 目录再 PROPFIND |
 | `data/remote/CryptoManager.kt` | AES-256-GCM 加解密 |
-| `data/remote/SyncSnapshot.kt` | 同步快照数据结构 + Entity ↔ Sync 转换函数；`SyncFile.z` 标记内层压缩 |
-| `data/remote/SyncManager.kt` | 核心同步编排：pull → merge → push + backup；ETag 条件下载、dirty 增量上传、Gzip 压缩；`isSyncing` StateFlow 暴露全局同步状态 |
+| `data/remote/SyncSnapshot.kt` | 同步快照数据结构 + `SyncFile` 包装 + Entity ↔ Sync 转换函数；用于定期压缩基线 |
+| `data/remote/SyncChangeBatch.kt` | 批次数据结构 + `BatchFile` 包装（支持加密和压缩）；每次 push 上传单个批次 |
+| `data/remote/SyncManager.kt` | 核心同步编排：PROPFIND 发现 → pull 批次 → merge → push 批次 → compact 压缩；`isSyncing` StateFlow；`resetSync` 重置本设备数据 |
+| `data/local/SyncChangeLog.kt` | 变更日志 Entity（`sync_change_log` 表），追踪每条数据的 CUD 操作 |
+| `data/local/SyncChangeLogDao.kt` | 变更日志 DAO：查询未同步、标记已同步、获取总数、清空等 |
 | `data/DataChangeNotifier.kt` | 数据变更事件通知器 |
-| `ui/screens/settings/SettingsViewModel.kt` | 同步状态管理（加密密码、自动备份开关、手动触发）；`saveConfig()` 仅在配置变化时重置测试状态 |
-| `ui/screens/settings/WebDavConfigScreen.kt` | 配置 UI（加密密码弹窗、同步状态展示） |
+| `ui/screens/settings/SettingsViewModel.kt` | 同步状态管理（配置保存、测试连接、手动同步、重置同步） |
+| `ui/screens/settings/WebDavConfigScreen.kt` | 配置 UI（WebDAV 参数、同步身份、开关、同步状态、重置同步按钮和确认对话框） |
 | `ui/screens/dashboard/DashboardViewModel.kt` | 注入 SyncManager，暴露 `isSyncing` 和 `triggerSync()` 供总览页同步按钮使用 |
 
 ### 界面结构
@@ -130,6 +134,7 @@
   3. 自动同步 — Switch（配置 + 连接测试成功后可操作）
   4. 自动备份（SQLite数据库） — Switch
   5. 同步状态 — 上次同步时间 + 当前状态 + [立即同步] 按钮
+  6. 重置同步 — [重置同步] OutlinedButton（警告图标），弹出确认对话框后清除本设备远程批次并重新上传
 - 所有文件上传到 `{URL}/简记账/` 子目录下（`Uri.encode("简记账")`）
 
 ## 账单导入功能（XLS）
