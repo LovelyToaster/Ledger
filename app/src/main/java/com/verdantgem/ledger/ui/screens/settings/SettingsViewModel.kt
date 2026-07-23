@@ -195,6 +195,32 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun resetSync() {
+        if (syncStatus == SyncStatus.SYNCING) return
+        if (webDavUrl.isBlank() || webDavUser.isBlank() || webDavPass.isBlank()) return
+        if (syncUsername.isBlank()) return
+
+        syncStatus = SyncStatus.SYNCING
+        syncStatusMessage = "重置同步中..."
+
+        viewModelScope.launch {
+            val cryptoPw = if (encryptionPasswordSet) encryptionPassword else null
+            val result = syncManager.resetSync(webDavUrl, webDavUser, webDavPass, cryptoPw, syncUsername)
+            when (result) {
+                is SyncResult.Success -> {
+                    syncStatus = SyncStatus.SUCCESS
+                    syncStatusMessage = "同步重置成功"
+                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                    lastSyncTime = sdf.format(java.util.Date())
+                }
+                is SyncResult.Error -> {
+                    syncStatus = SyncStatus.ERROR
+                    syncStatusMessage = "重置失败: ${result.message}"
+                }
+            }
+        }
+    }
+
     fun clearTestResult() {
         testResultMessage = null
     }

@@ -46,4 +46,7 @@ interface SyncChangeLogDao {
 
     @Query("SELECT COUNT(*) FROM sync_change_log")
     suspend fun getTotalCount(): Int
+
+    @Query("DELETE FROM sync_change_log")
+    suspend fun deleteAll()
 }

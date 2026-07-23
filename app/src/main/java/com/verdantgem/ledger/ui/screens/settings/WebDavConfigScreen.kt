@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +33,7 @@ fun WebDavConfigScreen(
     val vm = settingsViewModel
     var showDialog by remember { mutableStateOf(false) }
     var showIdentityDialog by remember { mutableStateOf(false) }
+    var showRebuildDialog by remember { mutableStateOf(false) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -154,6 +156,31 @@ fun WebDavConfigScreen(
                     }
                 }
             }
+
+            // 重建同步基线按钮
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                OutlinedButton(
+                    onClick = { showRebuildDialog = true },
+                    enabled = vm.syncStatus != SyncStatus.SYNCING
+                        && vm.webDavUrl.isNotEmpty()
+                        && vm.connectionTestSuccess
+                        && vm.syncUsernameSet
+                ) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("重置同步")
+                }
+            }
         }
     }
 
@@ -180,6 +207,31 @@ fun WebDavConfigScreen(
             onSave = { username, password -> vm.updateSyncIdentity(username, password) },
             onClear = { vm.clearSyncIdentity() },
             onDismiss = { showIdentityDialog = false }
+        )
+    }
+
+    if (showRebuildDialog) {
+        AlertDialog(
+            onDismissRequest = { showRebuildDialog = false },
+            title = { Text("重置同步") },
+            text = {
+                Text("将清除本设备在远程的批次文件，并从本机重新上传全部数据。\n\n" +
+                     "其他设备的数据不受影响，下次同步时将拉取本设备的新批次。\n\n" +
+                     "此操作不可撤销，确定继续？")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRebuildDialog = false
+                    vm.resetSync()
+                }) {
+                    Text("确定重置", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRebuildDialog = false }) {
+                    Text("取消")
+                }
+            }
         )
     }
 }

@@ -152,7 +152,7 @@ class SyncManager @Inject constructor(
             val listResult = webDavClient.listFiles(baseUrl, user, pass)
             if (listResult.isSuccess) {
                 val backups = listResult.getOrThrow()
-                    .map { it.trimStart('/').substringAfterLast('/') }
+                    .map { it.extractName() }
                     .filter { it.startsWith("ledger_backup_") && it.endsWith(".db.gz") }
                     .sorted()
                 if (backups.size > MAX_BACKUPS) {
@@ -227,23 +227,19 @@ class SyncManager @Inject constructor(
                     try {
                         ensureDir(url, user, pass, syncUsername)
 
-                        // 1. 升级检测：v1 → v2 迁移
-                        val upgradeResult = upgradeToIncremental(url, user, pass, cryptoPassword, syncUsername, dispatcher)
-                        if (upgradeResult is SyncResult.Error) return@withContext upgradeResult
+                        // 1. 断裂升级：清理旧 v2 残留（manifest.json → 已废弃）
+                        migrateFromV2(url, user, pass, cryptoPassword, syncUsername, dispatcher)
 
-                        // 1.5 新设备加入：变更日志为空时，从本地数据种子初始变更
+                        // 2. 新设备加入：变更日志为空时，从本地数据种子初始变更
                         seedChangeLogFromLocalData()
 
-                        // 2. 拉取远程变更
-                        val pullResult = pullChanges(url, user, pass, cryptoPassword, syncUsername, dispatcher)
-                        if (pullResult is SyncResult.Error && pullResult.message != "Remote manifest not found") {
-                            return@withContext pullResult
-                        }
+                        // 3. 拉取远程变更
+                        pullChanges(url, user, pass, cryptoPassword, syncUsername, dispatcher)
 
-                        // 3. 推送本地变更
+                        // 4. 推送本地变更
                         val pushResult = pushChanges(url, user, pass, cryptoPassword, syncUsername, dispatcher)
 
-                        // 4. 压缩检查
+                        // 5. 压缩检查
                         compactCheck(url, user, pass, cryptoPassword, syncUsername, dispatcher)
 
                         if (pushResult is SyncResult.Error) pushResult else SyncResult.Success
@@ -257,88 +253,60 @@ class SyncManager @Inject constructor(
         }
     }
 
-    private suspend fun upgradeToIncremental(
+    /**
+     * 断裂升级：删除旧 v2 的 manifest.json 和旧格式 snapshot.json.gz，
+     * 并将旧 snapshot 重命名为新命名格式。清除本地旧的 manifest 相关偏好。
+     * 仅执行一次。
+     */
+    private suspend fun migrateFromV2(
         url: String, user: String, pass: String,
         cryptoPassword: String?, username: String, dispatcher: CoroutineContext
-    ): SyncResult = withContext(dispatcher) {
+    ) {
+        if (prefs.getBoolean("migrated_to_v3", false)) return
         val baseDir = ensureSubPath(url, username)
-        val manifestUrl = baseDir + MANIFEST_FILE
-
-        // 检查 manifest 是否已存在
-        val headResult = webDavClient.head(manifestUrl, user, pass)
-        if (headResult.isSuccess) return@withContext SyncResult.Success // v2 已初始化
-
-        // 升级路径：检查旧 ledger_sync.json
-        val oldSyncUrl = baseDir + syncFile
-        val oldHeadResult = webDavClient.head(oldSyncUrl, user, pass)
-
-        if (oldHeadResult.isSuccess) {
-            // 存在旧格式文件：下载并合并作为种子数据
-            val tempFile = File(context.cacheDir, "sync_upgrade_temp")
-            try {
-                val downloadResult = webDavClient.restore(oldSyncUrl, user, pass, tempFile)
-                if (downloadResult.isSuccess) {
-                    val rawBytes = tempFile.readBytes()
-                    val rawJson = decompress(rawBytes)
-                    val syncFileWrapper = json.decodeFromString<SyncFile>(rawJson)
-                    val snapshot: SyncSnapshot? = if (syncFileWrapper.encrypted) {
-                        if (!cryptoPassword.isNullOrBlank()) {
-                            val decrypted = cryptoManager.decrypt(syncFileWrapper.ciphertext, cryptoPassword)
-                            val snapshotJson = if (syncFileWrapper.compressed) {
-                                val compressed = Base64.getDecoder().decode(decrypted)
-                                decompress(compressed)
-                            } else decrypted
-                            json.decodeFromString<SyncSnapshot>(snapshotJson)
-                        } else null
-                    } else syncFileWrapper.data
-
-                    if (snapshot != null) {
-                        mergeSnapshot(snapshot) // 复用旧的全量合并逻辑
+        // 删除旧 manifest.json（v2 残留）
+        try { webDavClient.deleteFile(baseDir + "manifest.json", user, pass) } catch (_: Exception) {}
+        // 重命名旧 snapshot.json.gz → snapshot_1.json.gz
+        try {
+            val oldSnapshotUrl = baseDir + "snapshot.json.gz"
+            val headResult = webDavClient.head(oldSnapshotUrl, user, pass)
+            if (headResult.isSuccess) {
+                // 下载旧快照 → 上传为新文件名 → 删除旧文件
+                val tempFile = File(context.cacheDir, "snapshot_migrate_temp")
+                try {
+                    val dl = webDavClient.restore(oldSnapshotUrl, user, pass, tempFile)
+                    if (dl.isSuccess) {
+                        webDavClient.backup(baseDir + "snapshot_1.json.gz", user, pass, tempFile)
                     }
+                } catch (_: Exception) {} finally {
+                    if (tempFile.exists()) tempFile.delete()
                 }
-            } catch (_: Exception) {
-                // 旧文件解析失败，忽略，从本地 DB 构建基线
-            } finally {
-                if (tempFile.exists()) tempFile.delete()
+                try { webDavClient.deleteFile(oldSnapshotUrl, user, pass) } catch (_: Exception) {}
             }
-
-            // 删除旧的 ledger_sync.json
-            try { webDavClient.deleteFile(oldSyncUrl, user, pass) } catch (_: Exception) {}
+        } catch (_: Exception) {}
+        // 清除/迁移本地旧的 manifest 相关偏好
+        val edit = prefs.edit()
+        for (key in prefs.all.keys) {
+            when {
+                // 迁移 remote_known_batch_* → known_batch_*
+                key.startsWith("remote_known_batch_") -> {
+                    val deviceId = key.removePrefix("remote_known_batch_")
+                    val value = prefs.getInt(key, 0)
+                    edit.putInt("known_batch_$deviceId", value)
+                    edit.remove(key)
+                }
+                // 删除不再需要的旧键
+                key.startsWith("remote_known_seq_") ||
+                key == "my_last_seq" ||
+                key == "last_compaction_time" ||
+                key == "manifest_etag" ||
+                key == "last_remote_etag" -> edit.remove(key)
+            }
         }
-
-        // 从本地数据库构建初始快照
-        val records = repository.getAllRecordsForSync().map { it.toSync() }
-        val categories = repository.getAllCategoriesForSync().map { it.toSync() }
-        val budgets = repository.getBudgetForSync()?.let { listOf(it.toSync()) } ?: emptyList()
-
-        val snapshot = SyncSnapshot(
-            deviceId = getDeviceId(),
-            syncTimestamp = System.currentTimeMillis(),
-            records = records,
-            categories = categories,
-            budgets = budgets
-        )
-
-        // 上传初始快照
-        if (!uploadSnapshot(snapshot, cryptoPassword, baseDir, user, pass)) {
-            return@withContext SyncResult.Error("Failed to upload initial snapshot")
-        }
-
-        // 创建并上传 manifest
-        val manifest = SyncManifest(
-            version = 2,
-            snapshotSeq = 1,
-            devices = mapOf(getDeviceId() to DeviceState(batch = 0, seq = 0))
-        )
-        if (!uploadManifest(manifest, manifestUrl, user, pass)) {
-            return@withContext SyncResult.Error("Failed to upload initial manifest")
-        }
-
-        // 保存本地状态
-        saveLocalSeqKeys(manifest)
-        prefs.edit().putString(KEY_MANIFEST_ETAG, null).apply()
-
-        SyncResult.Success
+        // 重置 last_snapshot_seq（旧值可能大于新命名快照的 seq）
+        edit.putInt("last_snapshot_seq", 0)
+        edit.putBoolean("migrated_to_v3", true)
+        edit.apply()
     }
 
     /**
@@ -401,43 +369,22 @@ class SyncManager @Inject constructor(
         if (unsynced.isEmpty()) return@withContext SyncResult.Success
 
         val baseDir = ensureSubPath(url, username)
-        val changesDir = baseDir + "changes/${getDeviceId()}/"
-        val manifestUrl = baseDir + MANIFEST_FILE
+        val changesDir = deviceChangesUrl(baseDir, getDeviceId())
 
         try {
             // 确保 changes/{deviceId}/ 目录存在
             webDavClient.mkdir(baseDir + "changes/", user, pass)
             webDavClient.mkdir(changesDir, user, pass)
 
-            // 读取当前 manifest 获取下一个批次号
-            var currentManifest = downloadManifest(manifestUrl, user, pass)
-            if (currentManifest == null) {
-                // manifest 不存在（首次同步或远程被清空）：创建初始 manifest
-                val records = repository.getAllRecordsForSync().map { it.toSync() }
-                val categories = repository.getAllCategoriesForSync().map { it.toSync() }
-                val budgets = repository.getBudgetForSync()?.let { listOf(it.toSync()) } ?: emptyList()
-                val snapshot = SyncSnapshot(
-                    deviceId = getDeviceId(), syncTimestamp = System.currentTimeMillis(),
-                    records = records, categories = categories, budgets = budgets
-                )
-                uploadSnapshot(snapshot, cryptoPassword, baseDir, user, pass)
-                currentManifest = SyncManifest(
-                    version = 2, snapshotSeq = 1,
-                    devices = mapOf(getDeviceId() to DeviceState(batch = 0, seq = 0))
-                )
-                if (!uploadManifest(currentManifest!!, manifestUrl, user, pass)) {
-                    return@withContext SyncResult.Error("Failed to create initial manifest")
-                }
-            }
-            val myState = currentManifest.devices[getDeviceId()] ?: DeviceState()
-            val nextBatch = myState.batch + 1
+            // PROPFIND 当前目录，取最大批次号
+            val maxBatch = discoverMaxBatch(changesDir, user, pass)
+            val nextBatch = maxBatch + 1
             val maxSeq = unsynced.maxOf { it.seq }
 
             // 从变更日志反序列化实体
             val records = mutableListOf<SyncRecord>()
             val categories = mutableListOf<SyncCategory>()
             val budgets = mutableListOf<SyncBudget>()
-
             val batchJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
             for (entry in unsynced) {
                 when (entry.entity) {
@@ -472,9 +419,8 @@ class SyncManager @Inject constructor(
             val tempFile = File(context.cacheDir, "sync_batch_temp")
             try {
                 tempFile.writeBytes(compressed)
-
                 // 上传批次文件
-                val batchUrl = "${changesDir}${String.format("%06d", nextBatch)}.json.gz"
+                val batchUrl = batchFileUrl(baseDir, getDeviceId(), nextBatch)
                 val uploadResult = webDavClient.backup(batchUrl, user, pass, tempFile)
                 if (uploadResult.isFailure) {
                     return@withContext SyncResult.Error(uploadResult.exceptionOrNull()?.message ?: "Batch upload failed")
@@ -483,41 +429,9 @@ class SyncManager @Inject constructor(
                 if (tempFile.exists()) tempFile.delete()
             }
 
-            // 乐观锁更新 manifest（使用读取-修改-写入窗口 + 重试）
-            var manifestUpdated = false
-            var retries = 0
-            while (!manifestUpdated && retries < MAX_MANIFEST_RETRIES) {
-                val manifest = downloadManifest(manifestUrl, user, pass)
-                if (manifest == null) {
-                    retries++
-                    continue
-                }
-                val devices = manifest.devices.toMutableMap()
-                devices[getDeviceId()] = DeviceState(batch = nextBatch, seq = maxSeq)
-                val newManifest = manifest.copy(devices = devices)
-
-                val success = uploadManifest(newManifest, manifestUrl, user, pass)
-                if (success) {
-                    manifestUpdated = true
-                    // 保存 ETag 用于后续
-                    val headRes = webDavClient.head(manifestUrl, user, pass)
-                    if (headRes.isSuccess) {
-                        prefs.edit().putString(KEY_MANIFEST_ETAG, headRes.getOrThrow()["etag"]).apply()
-                    }
-                }
-                retries++
-            }
-
-            if (!manifestUpdated) {
-                return@withContext SyncResult.Error("Failed to update manifest after $MAX_MANIFEST_RETRIES retries")
-            }
-
-            // 仅在 manifest 成功更新后标记已推送
+            // 标记已推送
             syncChangeLogDao.markSynced(maxSeq)
             dirty = false
-
-            // 保存本地同步位置
-            saveLocalSeqKeys(newManifest = null, myMaxSeq = maxSeq)
 
             prefs.edit().putLong("last_sync_time", System.currentTimeMillis()).apply()
             SyncResult.Success
@@ -531,18 +445,17 @@ class SyncManager @Inject constructor(
         cryptoPassword: String?, username: String, dispatcher: CoroutineContext
     ): SyncResult = withContext(dispatcher) {
         val baseDir = ensureSubPath(url, username)
-        val manifestUrl = baseDir + MANIFEST_FILE
-
-        val manifest = downloadManifest(manifestUrl, user, pass)
-            ?: return@withContext SyncResult.Error("Remote manifest not found")
-
         var anyApplied = false
         val myDeviceId = getDeviceId()
 
-        // 检查是否需要拉取新的基线快照
+        // 1. 先发现远程设备（供快照合并后更新 known_batch 使用）
+        val remoteDevices = discoverRemoteDevices(baseDir, user, pass)
+
+        // 2. 检查是否有新快照
+        val snapshotSeq = discoverSnapshotSeq(baseDir, user, pass)
         val lastSnapshotSeq = prefs.getInt("last_snapshot_seq", 0)
-        if (manifest.snapshotSeq > lastSnapshotSeq) {
-            val snapshotUrl = baseDir + SNAPSHOT_FILE
+        if (snapshotSeq > lastSnapshotSeq) {
+            val snapshotUrl = baseDir + SNAPSHOT_PREFIX + snapshotSeq + SNAPSHOT_SUFFIX
             val tempFile = File(context.cacheDir, "sync_snapshot_pull_temp")
             try {
                 val downloadResult = webDavClient.restore(snapshotUrl, user, pass, tempFile)
@@ -562,18 +475,24 @@ class SyncManager @Inject constructor(
                     } else syncFileWrapper.data
                     if (snapshot != null) {
                         mergeSnapshot(snapshot)
-                        prefs.edit().putInt("last_snapshot_seq", manifest.snapshotSeq).apply()
+                        // 快照已覆盖全量历史数据，将所有已知设备的 known_batch 归零
+                        val edit = prefs.edit()
+                        edit.putInt("last_snapshot_seq", snapshotSeq)
+                        for ((deviceId, _) in remoteDevices) {
+                            if (deviceId != myDeviceId) edit.putInt("known_batch_$deviceId", 0)
+                        }
+                        edit.apply()
                         anyApplied = true
                     }
                 }
             } catch (_: Exception) {
-                // 快照下载失败不阻断，继续拉取批次
+                // 快照下载失败不阻断
             } finally {
                 if (tempFile.exists()) tempFile.delete()
             }
         }
 
-        // 一次性加载全量数据用于合并（避免每个批次重复加载）
+        // 3. 一次性加载全量数据用于合并（含快照合并后的新数据）
         val allRecords = repository.getAllRecordsForSync()
         val recordsByUuid = allRecords.associateBy { it.syncUuid }
         val recordsById = allRecords.associateBy { it.id }
@@ -590,28 +509,33 @@ class SyncManager @Inject constructor(
         }
         val localBudget = repository.getBudgetForSync()
 
-        for ((deviceId, deviceState) in manifest.devices) {
-            if (deviceId == myDeviceId) continue // 跳过自己的
+        // 4. 拉取各设备的新批次
+        for ((deviceId, maxBatch) in remoteDevices) {
+            if (deviceId == myDeviceId) continue
 
-            val knownSeq = prefs.getInt("remote_known_seq_$deviceId", 0)
-            val knownBatch = prefs.getInt("remote_known_batch_$deviceId", 0)
+            var knownBatch = prefs.getInt("known_batch_$deviceId", 0)
 
-            if (deviceState.seq <= knownSeq) continue // 无新变更
+            // 仅在 PROPFIND 确实看到批次文件时才触发重置检测（maxBatch=0 可能是网络失败）
+            if (maxBatch > 0 && maxBatch < knownBatch) {
+                knownBatch = 0
+                prefs.edit()
+                    .putInt("known_batch_$deviceId", 0)
+                    .putInt("last_snapshot_seq", 0)
+                    .apply()
+            }
 
-            val changesDir = baseDir + "changes/$deviceId/"
+            if (maxBatch <= knownBatch) continue
+
+            val changesDir = deviceChangesUrl(baseDir, deviceId)
             val batchJson = Json { ignoreUnknownKeys = true }
-
-            // 逐个下载新批次
             var appliedMaxBatch = knownBatch
-            for (batchNum in (knownBatch + 1)..deviceState.batch) {
-                val batchUrl = "${changesDir}${String.format("%06d", batchNum)}.json.gz"
+
+            for (batchNum in (knownBatch + 1)..maxBatch) {
+                val batchUrl = batchFileUrl(baseDir, deviceId, batchNum)
                 val tempFile = File(context.cacheDir, "sync_pull_batch_temp")
                 try {
                     val downloadResult = webDavClient.restore(batchUrl, user, pass, tempFile)
-                    if (downloadResult.isFailure) {
-                        break // 批次不可用则停止，不跳过继续
-                    }
-
+                    if (downloadResult.isFailure) break
                     val compressed = tempFile.readBytes()
                     val rawJson = decompress(compressed)
                     val batchFile = batchJson.decodeFromString<BatchFile>(rawJson)
@@ -624,7 +548,6 @@ class SyncManager @Inject constructor(
                         batchFile.data ?: break
                     }
                     val batch = batchJson.decodeFromString<SyncChangeBatch>(batchJsonStr)
-
                     mergeChangeBatch(
                         batch, recordsByUuid, recordsById,
                         categoriesByUuid, categoriesById, categoriesByKey, localBudget
@@ -632,18 +555,14 @@ class SyncManager @Inject constructor(
                     appliedMaxBatch = batchNum
                     anyApplied = true
                 } catch (e: Exception) {
-                    break // 解析失败也停止，不跳过
+                    break
                 } finally {
                     if (tempFile.exists()) tempFile.delete()
                 }
             }
 
-            // 仅推进到成功处理的批次
             if (appliedMaxBatch > knownBatch) {
-                prefs.edit()
-                    .putInt("remote_known_seq_$deviceId", deviceState.seq)
-                    .putInt("remote_known_batch_$deviceId", appliedMaxBatch)
-                    .apply()
+                prefs.edit().putInt("known_batch_$deviceId", appliedMaxBatch).apply()
             }
         }
 
@@ -735,11 +654,7 @@ class SyncManager @Inject constructor(
         cryptoPassword: String?, username: String, dispatcher: CoroutineContext
     ) {
         val totalChanges = syncChangeLogDao.getTotalCount()
-        val lastCompact = prefs.getLong(KEY_LAST_COMPACTION, 0L)
-        val hoursSinceCompact = (System.currentTimeMillis() - lastCompact) / 3600_000L
-
-        // 条件：变更日志 > 200 条 或 距上次压缩 > 24 小时
-        if (totalChanges > COMPACTION_THRESHOLD || (hoursSinceCompact > 24 && totalChanges > 0)) {
+        if (totalChanges > COMPACTION_THRESHOLD) {
             compact(url, user, pass, cryptoPassword, username, dispatcher)
         }
     }
@@ -749,14 +664,14 @@ class SyncManager @Inject constructor(
         cryptoPassword: String?, username: String, dispatcher: CoroutineContext
     ) = withContext(dispatcher) {
         val baseDir = ensureSubPath(url, username)
-        val manifestUrl = baseDir + MANIFEST_FILE
 
         try {
-            // 1. 构建并上传全量快照
+            // 1. 构建并上传全量快照（seq 递增）
             val records = repository.getAllRecordsForSync().map { it.toSync() }
             val categories = repository.getAllCategoriesForSync().map { it.toSync() }
             val budgets = repository.getBudgetForSync()?.let { listOf(it.toSync()) } ?: emptyList()
 
+            val newSeq = (prefs.getInt("last_snapshot_seq", 0)) + 1
             val snapshot = SyncSnapshot(
                 deviceId = getDeviceId(),
                 syncTimestamp = System.currentTimeMillis(),
@@ -764,71 +679,157 @@ class SyncManager @Inject constructor(
                 categories = categories,
                 budgets = budgets
             )
-            uploadSnapshot(snapshot, cryptoPassword, baseDir, user, pass)
+            uploadSnapshot(snapshot, cryptoPassword, baseDir, user, pass, newSeq)
 
-            // 2. 更新 manifest：递增 snapshotSeq，保留各设备 seq/batch
-            val manifest = downloadManifest(manifestUrl, user, pass) ?: return@withContext
-            val newManifest = manifest.copy(snapshotSeq = manifest.snapshotSeq + 1)
-            uploadManifest(newManifest, manifestUrl, user, pass)
-
-            // 3. 清理远程旧的批次文件
-            for (deviceId in manifest.devices.keys) {
-                val deviceChangesDir = baseDir + "changes/$deviceId/"
-                try {
-                    val files = webDavClient.listFiles(deviceChangesDir, user, pass)
-                    files.getOrNull()?.forEach { filePath ->
-                        val fileName = filePath.trimStart('/').substringAfterLast('/')
-                        if (fileName.endsWith(".json.gz")) {
-                            try { webDavClient.deleteFile(deviceChangesDir + fileName, user, pass) } catch (_: Exception) {}
-                        }
+            // 2. 只删除自己的批次文件（不影响其他设备）
+            val myDir = deviceChangesUrl(baseDir, getDeviceId())
+            val batchFiles = webDavClient.listFiles(myDir, user, pass).getOrNull()
+            if (batchFiles != null) {
+                for (path in batchFiles) {
+                    val name = path.extractName()
+                    if (name.endsWith(".json.gz")) {
+                        try { webDavClient.deleteFile(myDir + name, user, pass) } catch (_: Exception) {}
                     }
-                } catch (_: Exception) {}
+                }
             }
 
-            // 4. 清理本地变更日志中已同步的条目
-            val maxSeq = syncChangeLogDao.getMaxSeq()
-            syncChangeLogDao.deleteSyncedUpTo(maxSeq)
-
-            // 5. 保存压缩时间（不重置设备 knownSeq/batch，由 pullChanges 消费 snapshotSeq）
-            prefs.edit()
-                .putLong(KEY_LAST_COMPACTION, System.currentTimeMillis())
-                .putInt("last_snapshot_seq", newManifest.snapshotSeq)
-                .apply()
+            // 3. 清理本地变更日志 + 更新快照序号
+            syncChangeLogDao.deleteAll()
+            prefs.edit().putInt("last_snapshot_seq", newSeq).apply()
         } catch (e: Exception) {
             // 压缩失败不应阻断正常同步
         }
     }
 
-    private suspend fun downloadManifest(manifestUrl: String, user: String, pass: String): SyncManifest? {
-        val tempFile = File(context.cacheDir, "manifest_download_temp")
+    /**
+     * 重置同步：清除本设备在远程的批次文件，从本机全量重新上传。
+     * 不影响其他设备的数据（快照基线和其他设备的批次文件均保留）。
+     * 用于修复本设备同步异常状态，或在新设备上初始化同步组。
+     */
+    suspend fun resetSync(
+        url: String, user: String, pass: String,
+        cryptoPassword: String?, username: String,
+        dispatcher: CoroutineContext = Dispatchers.IO
+    ): SyncResult = withContext(dispatcher) {
         try {
-            val result = webDavClient.restore(manifestUrl, user, pass, tempFile)
-            if (result.isFailure) return null
-            val content = tempFile.readText(Charsets.UTF_8)
-            return try {
-                json.decodeFromString<SyncManifest>(content)
-            } catch (_: Exception) { null }
+            _isSyncing.value = true
+            mutex.withLock {
+                val baseDir = ensureSubPath(url, username)
+
+                // 1. 删除旧格式残留文件（v1/v2 遗留，不影响其他设备）
+                try { webDavClient.deleteFile(baseDir + "manifest.json", user, pass) } catch (_: Exception) {}
+                try { webDavClient.deleteFile(baseDir + syncFile, user, pass) } catch (_: Exception) {}
+                // 注意：不删除快照文件（snapshot_*.json.gz），它们属于所有设备共享的基线
+
+                // 2. 只删除自己的批次文件（不影响其他设备）
+                val myDir = deviceChangesUrl(baseDir, getDeviceId())
+                try {
+                    val batchFiles = webDavClient.listFiles(myDir, user, pass).getOrNull()
+                    if (batchFiles != null) {
+                        for (path in batchFiles) {
+                            val name = path.extractName()
+                            if (name.endsWith(".json.gz")) {
+                                try { webDavClient.deleteFile(myDir + name, user, pass) } catch (_: Exception) {}
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                // 3. 清空本地变更日志
+                syncChangeLogDao.deleteAll()
+
+                // 4. 清除所有同步状态
+                val edit = prefs.edit()
+                for (key in prefs.all.keys) {
+                    if (key.startsWith("known_batch_") || key.startsWith("remote_known_") ||
+                        key == "last_snapshot_seq" || key == "my_last_seq" ||
+                        key == "last_compaction_time" || key == "manifest_etag" ||
+                        key == "last_remote_etag"
+                    ) {
+                        edit.remove(key)
+                    }
+                }
+                edit.apply()
+                dirty = false
+
+                // 5. 种子全量本地数据 → pushChanges 自动推送
+                seedChangeLogFromLocalData()
+                val pushResult = pushChanges(url, user, pass, cryptoPassword, username, dispatcher)
+                if (pushResult is SyncResult.Error) return@withLock pushResult
+
+                prefs.edit().putLong("last_sync_time", System.currentTimeMillis()).apply()
+                SyncResult.Success
+            }
+        } catch (e: Exception) {
+            SyncResult.Error(e.message ?: "Reset sync failed")
         } finally {
-            if (tempFile.exists()) tempFile.delete()
+            _isSyncing.value = false
         }
     }
 
-    private suspend fun uploadManifest(manifest: SyncManifest, manifestUrl: String, user: String, pass: String): Boolean {
-        val tempFile = File(context.cacheDir, "manifest_upload_temp")
-        try {
-            tempFile.writeText(json.encodeToString(SyncManifest.serializer(), manifest))
-            val result = webDavClient.backup(manifestUrl, user, pass, tempFile)
-            return result.isSuccess
-        } catch (_: Exception) {
-            return false
-        } finally {
-            if (tempFile.exists()) tempFile.delete()
+    // ---- PROPFIND 辅助方法 ----
+
+    /** 从 PROPFIND href 提取最后一段文件名/目录名，兼容带/不带尾随 / */
+    private fun String.extractName(): String = this.trim('/').substringAfterLast('/')
+
+    /** 构建设备批次目录的绝对 URL */
+    private fun deviceChangesUrl(baseDir: String, deviceId: String) =
+        baseDir + "changes/" + deviceId + "/"
+
+    /** 构建批次文件的绝对 URL */
+    private fun batchFileUrl(baseDir: String, deviceId: String, batchNum: Int) =
+        deviceChangesUrl(baseDir, deviceId) + String.format("%06d", batchNum) + ".json.gz"
+
+    /** PROPFIND changes/ 目录，返回 Map<deviceId, maxBatchNum> */
+    private suspend fun discoverRemoteDevices(baseDir: String, user: String, pass: String): Map<String, Int> {
+        val result = mutableMapOf<String, Int>()
+        val changesBase = baseDir + "changes/"
+        val deviceDirs = webDavClient.listFiles(changesBase, user, pass).getOrNull() ?: return result
+        for (dirPath in deviceDirs) {
+            val deviceId = dirPath.extractName()
+            if (deviceId.isBlank() || deviceId == "changes") continue
+            val maxBatch = discoverMaxBatch(deviceChangesUrl(baseDir, deviceId), user, pass)
+            result[deviceId] = maxBatch
         }
+        return result
     }
+
+    /** PROPFIND 根目录，匹配 snapshot_{seq}.json.gz，返回最大 seq */
+    private suspend fun discoverSnapshotSeq(baseDir: String, user: String, pass: String): Int {
+        val files = webDavClient.listFiles(baseDir, user, pass).getOrNull() ?: return 0
+        var maxSeq = 0
+        for (path in files) {
+            val name = path.extractName()
+            if (name.startsWith(SNAPSHOT_PREFIX) && name.endsWith(SNAPSHOT_SUFFIX)) {
+                val seqStr = name.removePrefix(SNAPSHOT_PREFIX).removeSuffix(SNAPSHOT_SUFFIX)
+                val seq = seqStr.toIntOrNull() ?: continue
+                if (seq > maxSeq) maxSeq = seq
+            }
+        }
+        return maxSeq
+    }
+
+    /** PROPFIND 指定目录，返回最大批次号（从文件名 000xxx.json.gz 提取） */
+    private suspend fun discoverMaxBatch(dirUrl: String, user: String, pass: String): Int {
+        val files = webDavClient.listFiles(dirUrl, user, pass).getOrNull() ?: return 0
+        var maxBatch = 0
+        for (path in files) {
+            val name = path.extractName()
+            if (name.endsWith(".json.gz")) {
+                val numStr = name.removeSuffix(".json.gz")
+                val num = numStr.toIntOrNull() ?: continue
+                if (num > maxBatch) maxBatch = num
+            }
+        }
+        return maxBatch
+    }
+
+    // ---- 文件上传/下载 ----
 
     private suspend fun uploadSnapshot(
         snapshot: SyncSnapshot, cryptoPassword: String?,
-        baseDir: String, user: String, pass: String
+        baseDir: String, user: String, pass: String,
+        seq: Int = 1
     ): Boolean {
         val tempFile = File(context.cacheDir, "snapshot_upload_temp")
         try {
@@ -844,30 +845,14 @@ class SyncManager @Inject constructor(
             val outputJson = json.encodeToString(SyncFile.serializer(), syncFileWrapper)
             val compressed = compress(outputJson)
             tempFile.writeBytes(compressed)
-            val result = webDavClient.backup(baseDir + SNAPSHOT_FILE, user, pass, tempFile)
+            val snapshotUrl = baseDir + SNAPSHOT_PREFIX + seq + SNAPSHOT_SUFFIX
+            val result = webDavClient.backup(snapshotUrl, user, pass, tempFile)
             return result.isSuccess
         } catch (_: Exception) {
             return false
         } finally {
             if (tempFile.exists()) tempFile.delete()
         }
-    }
-
-    private fun saveLocalSeqKeys(newManifest: SyncManifest? = null, myMaxSeq: Int? = null) {
-        val edit = prefs.edit()
-        val myDeviceId = getDeviceId()
-        if (myMaxSeq != null) {
-            edit.putInt("my_last_seq", myMaxSeq)
-        }
-        if (newManifest != null) {
-            for ((deviceId, state) in newManifest.devices) {
-                if (deviceId != myDeviceId) {
-                    edit.putInt("remote_known_seq_$deviceId", state.seq)
-                    edit.putInt("remote_known_batch_$deviceId", state.batch)
-                }
-            }
-        }
-        edit.apply()
     }
 
     private suspend fun mergeSnapshot(snapshot: SyncSnapshot) {
@@ -983,13 +968,9 @@ class SyncManager @Inject constructor(
 
     companion object {
         private const val MAX_BACKUPS = 5
-        private const val MAX_MANIFEST_RETRIES = 3
         private const val COMPACTION_THRESHOLD = 200
-        private const val KEY_LAST_REMOTE_ETAG = "last_remote_etag"
         private const val KEY_SYNC_DIRTY = "sync_dirty"
-        private const val KEY_LAST_COMPACTION = "last_compaction_time"
-        private const val KEY_MANIFEST_ETAG = "manifest_etag"
-        private const val MANIFEST_FILE = "manifest.json"
-        private const val SNAPSHOT_FILE = "snapshot.json.gz"
+        private const val SNAPSHOT_PREFIX = "snapshot_"
+        private const val SNAPSHOT_SUFFIX = ".json.gz"
     }
 }
